@@ -1,8 +1,8 @@
 //! Spike: log in with Firefox cookies and list library playlists.
-//! Run: cargo run -p sonora-ytm --example library
+//! Run: cargo run -p velour-ytm --example library
 
 use serde_json::Value;
-use sonora_ytm::{Client, Cookies};
+use velour_ytm::{Client, Cookies};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

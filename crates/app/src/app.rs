@@ -17,12 +17,12 @@ use gtk::glib;
 use gtk::prelude::*;
 use relm4::Sender;
 use relm4::prelude::*;
-use sonora_player::{Event, Player, Resolver};
-use sonora_ytm::{Card, Client, Cookies, Item, LikeStatus, Page, PageType, Queue, Section, Target, Track};
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use velour_player::{Event, Player, Resolver};
+use velour_ytm::{Card, Client, Cookies, Item, LikeStatus, Page, PageType, Queue, Section, Target, Track};
 
 #[derive(Debug, Clone, PartialEq)]
 enum NavKey {
@@ -70,7 +70,7 @@ pub enum CmdOut {
     Done { message: Option<String>, error: Option<String>, refresh_playlists: bool, reload: bool, back: bool },
     Downloaded { track: Track, result: Result<PathBuf, String> },
     Prefetched,
-    Health(sonora_player::Health),
+    Health(velour_player::Health),
     Suggestions { query: String, list: Vec<String> },
     YtDlpUpdated(Result<String, String>),
 }
@@ -126,7 +126,7 @@ pub struct App {
     lyrics_timer: Option<glib::SourceId>,
     radio_loading: bool,
     prefetching: bool,
-    health: Option<sonora_player::Health>,
+    health: Option<velour_player::Health>,
     lyrics_for: Option<String>,
 
     bar: PlayerBar,
@@ -171,9 +171,9 @@ fn nav_index(r: Root) -> Option<usize> {
     })
 }
 
-/// `--cookies-from-browser` value for yt-dlp; Firefox gets the exact profile Sonora reads.
+/// `--cookies-from-browser` value for yt-dlp; Firefox gets the exact profile Velour reads.
 fn cookies_arg(browser: &str) -> String {
-    match (browser, sonora_ytm::auth::default_firefox_profile()) {
+    match (browser, velour_ytm::auth::default_firefox_profile()) {
         ("firefox", Ok(p)) => format!("firefox:{}", p.display()),
         (b, _) => b.to_string(),
     }
@@ -193,10 +193,10 @@ impl Component for App {
 
     fn init_root() -> Self::Root {
         gtk::ApplicationWindow::builder()
-            .title("Sonora")
+            .title("Velour")
             .default_width(1200)
             .default_height(780)
-            .css_classes(["sonora"])
+            .css_classes(["velour"])
             .build()
     }
 
@@ -358,7 +358,7 @@ impl Component for App {
         bottom.set_vexpand(true);
         bottom.set_valign(gtk::Align::End);
 
-        let brand = gtk::Label::new(Some("Sonora"));
+        let brand = gtk::Label::new(Some("Velour"));
         brand.add_css_class("brand");
         brand.set_xalign(0.0);
         sidebar.append(&brand);
@@ -456,12 +456,12 @@ impl Component for App {
         }
         let player = {
             let s = input.clone();
-            // SONORA_AO=null runs silently (used for testing).
-            let ao = std::env::var("SONORA_AO").ok();
+            // VELOUR_AO=null runs silently (used for testing).
+            let ao = std::env::var("VELOUR_AO").ok();
             match Player::new(ao.as_deref(), move |e| s.emit(AppMsg::Player(e))) {
                 Ok(p) => Some(p),
                 Err(e) => {
-                    eprintln!("sonora: audio unavailable: {e:#}");
+                    eprintln!("velour: audio unavailable: {e:#}");
                     None
                 }
             }
@@ -528,6 +528,7 @@ impl Component for App {
             last_width: 0,
             settings,
         };
+        model.apply_sidebar_playlists();
         model.apply_theme();
         model.apply_eq();
         if let Some(p) = &model.player {
@@ -1281,7 +1282,7 @@ impl App {
                 } else {
                     vec![Section {
                         title: String::new(),
-                        layout: sonora_ytm::Layout::List,
+                        layout: velour_ytm::Layout::List,
                         items: tracks.into_iter().map(Item::Track).collect(),
                         more: None,
                     }]
@@ -1433,6 +1434,13 @@ impl App {
         b.upcast()
     }
 
+    fn apply_sidebar_playlists(&self) {
+        let show = self.settings.sidebar_playlists && !self.collapsed;
+        for w in &self.sidebar_extras[1..] {
+            w.set_visible(show);
+        }
+    }
+
     fn set_collapsed(&mut self, collapsed: bool) {
         if collapsed == self.collapsed {
             return;
@@ -1442,9 +1450,9 @@ impl App {
         for l in &self.nav_labels {
             l.set_visible(!collapsed);
         }
-        for w in &self.sidebar_extras {
-            w.set_visible(!collapsed);
-        }
+        // [0] is the brand label, the rest is the playlists section.
+        self.sidebar_extras[0].set_visible(!collapsed);
+        self.apply_sidebar_playlists();
         self.search.set_visible(!collapsed);
         self.search_button.set_visible(collapsed);
         if collapsed { self.sidebar.add_css_class("collapsed") } else { self.sidebar.remove_css_class("collapsed") }
@@ -1573,7 +1581,7 @@ impl App {
             Err(e) => {
                 self.failures += 1;
                 let title = self.queue.current().map(|t| t.title.clone()).unwrap_or_default();
-                let hint = if sonora_player::looks_outdated(&e) { " — try updating yt-dlp in Settings" } else { "" };
+                let hint = if velour_player::looks_outdated(&e) { " — try updating yt-dlp in Settings" } else { "" };
                 self.toast(&format!("Can’t play “{title}”: {e}{hint}"));
                 self.pending_id = None;
                 self.bar.set_loading(false);
@@ -1693,7 +1701,7 @@ impl App {
                     }
                 }
             }
-            Event::Error(e) => eprintln!("sonora: playback error: {e}"),
+            Event::Error(e) => eprintln!("velour: playback error: {e}"),
         }
     }
 
@@ -1763,7 +1771,7 @@ impl App {
         let Some(c) = self.ytm.clone() else { return };
         relm4::spawn(async move {
             if let Err(e) = c.add_history(&id).await {
-                eprintln!("sonora: history: {e:#}");
+                eprintln!("velour: history: {e:#}");
             }
         });
     }
@@ -1878,7 +1886,7 @@ impl App {
         if let Some(p) = &self.player
             && let Err(e) = p.set_audio_filter(&eq::filter(&self.settings.eq_preset))
         {
-            eprintln!("sonora: equalizer: {e:#}");
+            eprintln!("velour: equalizer: {e:#}");
         }
     }
 
@@ -1907,9 +1915,13 @@ impl App {
                 return;
             }
             SettingChange::Downloads(v) => s.downloads = v,
+            SettingChange::SidebarPlaylists(v) => {
+                s.sidebar_playlists = v;
+                self.apply_sidebar_playlists();
+            }
             SettingChange::LowMemory(v) => {
                 s.low_memory = v;
-                self.toast("Takes effect after restarting Sonora");
+                self.toast("Takes effect after restarting Velour");
             }
             SettingChange::UpdateYtDlp => {
                 let r = self.resolver.clone();

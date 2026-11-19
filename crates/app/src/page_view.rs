@@ -1,4 +1,4 @@
-//! Renders a `sonora_ytm::Page` (header, track lists, carousels, grids) into GTK widgets.
+//! Renders a `velour_ytm::Page` (header, track lists, carousels, grids) into GTK widgets.
 
 use crate::icon_names as icons;
 use crate::images;
@@ -7,10 +7,10 @@ use crate::widgets::{fmt_duration, icon_button};
 use gtk::glib;
 use gtk::prelude::*;
 use relm4::Sender;
-use sonora_ytm::{Header, Item, Layout, LikeStatus, Page, PageType, Section, Target, Track};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
+use velour_ytm::{Header, Item, Layout, LikeStatus, Page, PageType, Section, Target, Track};
 
 /// Shared state a page needs to build its rows and menus.
 #[derive(Clone)]
@@ -681,7 +681,7 @@ fn link_label(markup: &str, sender: &Sender<AppMsg>) -> gtk::Label {
     let s = sender.clone();
     l.connect_activate_link(move |_, uri| {
         if let Some(id) = uri.strip_prefix("browse:") {
-            let page_type = sonora_ytm::PageType::from_id(id);
+            let page_type = velour_ytm::PageType::from_id(id);
             s.emit(AppMsg::Open(Target::Browse { id: id.to_string(), params: None, page_type }));
         }
         glib::Propagation::Stop

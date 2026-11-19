@@ -2355,55 +2355,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sonora"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "discord-rich-presence",
- "gtk4",
- "hex",
- "image",
- "ksni",
- "mpris-server",
- "rand 0.9.5",
- "relm4",
- "relm4-icons",
- "relm4-icons-build",
- "reqwest",
- "serde",
- "serde_json",
- "sha1",
- "sonora-player",
- "sonora-ytm",
- "tokio",
-]
-
-[[package]]
-name = "sonora-player"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "libc",
- "libmpv2",
- "sonora-ytm",
-]
-
-[[package]]
-name = "sonora-ytm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hex",
- "rand 0.9.5",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha1",
- "tokio",
-]
-
-[[package]]
 name = "spin"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2834,6 +2785,55 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "velour"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "discord-rich-presence",
+ "gtk4",
+ "hex",
+ "image",
+ "ksni",
+ "mpris-server",
+ "rand 0.9.5",
+ "relm4",
+ "relm4-icons",
+ "relm4-icons-build",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha1",
+ "tokio",
+ "velour-player",
+ "velour-ytm",
+]
+
+[[package]]
+name = "velour-player"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "libmpv2",
+ "velour-ytm",
+]
+
+[[package]]
+name = "velour-ytm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "rand 0.9.5",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "tokio",
+]
 
 [[package]]
 name = "version-compare"

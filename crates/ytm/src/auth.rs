@@ -22,7 +22,7 @@ impl Cookies {
 
     pub fn from_firefox_profile(profile: &Path) -> Result<Self> {
         // Firefox keeps the database locked while running, so read a copy.
-        let tmp = std::env::temp_dir().join(format!("sonora-cookies-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("velour-cookies-{}", std::process::id()));
         std::fs::create_dir_all(&tmp)?;
         let result = (|| {
             for suffix in ["", "-wal"] {
@@ -56,7 +56,7 @@ impl Cookies {
         if browser == "firefox" {
             return Self::from_firefox();
         }
-        let dir = std::env::temp_dir().join(format!("sonora-cookies-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("velour-cookies-{}", std::process::id()));
         std::fs::create_dir_all(&dir)?;
         #[cfg(unix)]
         {

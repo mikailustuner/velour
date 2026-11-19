@@ -1,5 +1,5 @@
 //! Dev check of live endpoints that fixtures don't cover.
-use sonora_ytm::*;
+use velour_ytm::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

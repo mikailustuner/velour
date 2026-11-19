@@ -1,13 +1,13 @@
 //! Dev tool: save InnerTube responses as parser test fixtures.
 //!
-//!   cargo run -p sonora-ytm --example dump -- public    # signed out → tests/fixtures/public (committed)
-//!   cargo run -p sonora-ytm --example dump -- private   # your account → tests/fixtures/private (gitignored)
+//!   cargo run -p velour-ytm --example dump -- public    # signed out → tests/fixtures/public (committed)
+//!   cargo run -p velour-ytm --example dump -- private   # your account → tests/fixtures/private (gitignored)
 //!
 //! Tracking/telemetry keys are stripped before saving.
 
 use serde_json::{Value, json};
-use sonora_ytm::{Card, Client, Cookies, Item, PageType, Target};
 use std::path::{Path, PathBuf};
+use velour_ytm::{Card, Client, Cookies, Item, PageType, Target};
 
 /// Public, stable ids used for committed fixtures.
 const ARTIST: &str = "UCQm-Fc8TAF3c1hJffBPjxgw"; // Tarkan

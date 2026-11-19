@@ -3,10 +3,10 @@
 use crate::settings::{state_dir, write_json};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use sonora_ytm::Track;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use velour_ytm::Track;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {

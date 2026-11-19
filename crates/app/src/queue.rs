@@ -2,7 +2,7 @@
 
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use sonora_ytm::Track;
+use velour_ytm::Track;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Repeat {

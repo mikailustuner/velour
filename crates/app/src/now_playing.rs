@@ -8,7 +8,7 @@ use crate::widgets::icon_button;
 use gtk::glib;
 use gtk::prelude::*;
 use relm4::Sender;
-use sonora_ytm::{PageType, Target, Track};
+use velour_ytm::{PageType, Target, Track};
 
 const COVER: i32 = 380;
 

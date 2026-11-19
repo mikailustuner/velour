@@ -1,9 +1,9 @@
-/* Sonora — Tiphys-style theme (see docs/design.md).
+/* Velour — Tiphys-style theme (see docs/design.md).
    Dark: pure black canvas, soft static color glows, translucent cards with hairline borders,
    large radii, indigo accent. No backdrop blur (GTK can't do it cheaply); depth comes from
    layered translucency instead. Light mode mirrors Tiphys light. */
 
-window.sonora {
+window.velour {
   --bg: #000000;
   --card: rgba(255, 255, 255, 0.06);
   --card-strong: rgba(255, 255, 255, 0.09);
@@ -36,7 +36,7 @@ window.sonora {
 }
 
 @media (prefers-color-scheme: light) {
-  window.sonora {
+  window.velour {
     --bg: #F2F2F7;
     --card: #FFFFFF;
     --card-strong: #FFFFFF;
@@ -64,7 +64,7 @@ window.sonora {
   }
 }
 
-window.sonora {
+window.velour {
   color: var(--text);
   font-family: "Plus Jakarta Sans", "Inter", sans-serif;
   font-size: 14px;
@@ -75,7 +75,7 @@ window.sonora {
     radial-gradient(ellipse at 95% 110%, var(--glow-b), transparent 45%);
 }
 
-window.sonora *:focus-visible {
+window.velour *:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -489,15 +489,15 @@ label link:hover {
   font-weight: 500;
 }
 
-window.sonora scale.progress trough,
-window.sonora scale.volume trough {
+window.velour scale.progress trough,
+window.velour scale.volume trough {
   background: var(--hairline);
   min-height: 4px;
   border-radius: 2px;
 }
 
-window.sonora scale.progress trough highlight,
-window.sonora scale.volume trough highlight {
+window.velour scale.progress trough highlight,
+window.velour scale.volume trough highlight {
   margin: 0;
   background-image: none;
   background-color: var(--accent);
@@ -505,12 +505,12 @@ window.sonora scale.volume trough highlight {
   border-radius: 2px;
 }
 
-window.sonora scale.volume trough highlight {
+window.velour scale.volume trough highlight {
   background-color: var(--text2);
 }
 
-window.sonora scale.progress trough slider,
-window.sonora scale.volume trough slider {
+window.velour scale.progress trough slider,
+window.velour scale.volume trough slider {
   background: var(--solid);
   min-width: 12px;
   min-height: 12px;
@@ -522,9 +522,9 @@ window.sonora scale.volume trough slider {
   transition: opacity 150ms ease-out;
 }
 
-window.sonora scale.progress:hover trough slider,
-window.sonora scale.volume:hover trough slider,
-window.sonora scale:focus-visible trough slider {
+window.velour scale.progress:hover trough slider,
+window.velour scale.volume:hover trough slider,
+window.velour scale:focus-visible trough slider {
   opacity: 1;
 }
 
@@ -644,12 +644,12 @@ list.settings-group > row:last-child {
   padding: 14px 16px;
 }
 
-window.sonora dropdown > button,
-window.sonora entry {
+window.velour dropdown > button,
+window.velour entry {
   border-radius: 12px;
 }
 
-window.sonora switch:checked {
+window.velour switch:checked {
   background: var(--accent);
 }
 

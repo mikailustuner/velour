@@ -1,10 +1,10 @@
 //! End-to-end check of playlist editing on a throwaway private playlist (deleted at the end).
-//! Run: cargo run -p sonora-ytm --example e2e_playlist
+//! Run: cargo run -p velour-ytm --example e2e_playlist
 //! Touches only the playlist it creates.
 
 use anyhow::{Context, ensure};
-use sonora_ytm::*;
 use std::time::Duration;
+use velour_ytm::*;
 
 const A: &str = "TtSr-J-SYMw";
 const B: &str = "bnZoviZwjSc";
@@ -12,7 +12,7 @@ const B: &str = "bnZoviZwjSc";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let c = Client::new(Cookies::from_firefox()?).await?;
-    let id = c.create_playlist("Sonora test — safe to delete", &[A]).await?;
+    let id = c.create_playlist("Velour test — safe to delete", &[A]).await?;
     println!("created {id}");
     let result = run(&c, &id).await;
     // Always clean up, even if a step failed.
@@ -58,9 +58,9 @@ async fn run(c: &Client, id: &str) -> anyhow::Result<()> {
     ensure!(!t.iter().any(|x| x.video_id == A), "removed track still there");
     println!("remove: ok");
 
-    c.rename_playlist(id, "Sonora test — renamed").await?;
+    c.rename_playlist(id, "Velour test — renamed").await?;
     let (p, _) = tracks(c, id).await?;
-    ensure!(p.header.as_ref().is_some_and(|h| h.title == "Sonora test — renamed"), "rename not visible");
+    ensure!(p.header.as_ref().is_some_and(|h| h.title == "Velour test — renamed"), "rename not visible");
     println!("rename: ok");
     Ok(())
 }

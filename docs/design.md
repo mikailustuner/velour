@@ -1,4 +1,4 @@
-# Sonora design system
+# Velour design system
 
 Inspired by the author's Tiphys app: near-black canvas, translucent cards with hairline borders,
 large radii, indigo accent, Plus Jakarta Sans. Dark first; light mirrors Tiphys light.
@@ -24,7 +24,7 @@ Contrast: text2 on black ≈ 7:1; accent on black ≈ 10:1; black on `solid` ≈
 
 ## Typography
 
-Plus Jakarta Sans (OFL, bundled in `assets/fonts`, installed to `~/.local/share/fonts/sonora`),
+Plus Jakarta Sans (OFL, bundled in `assets/fonts`, installed to `~/.local/share/fonts/velour`),
 fallback Inter. Weight carries hierarchy; tabular numbers for times.
 
 | Role | Size / weight |

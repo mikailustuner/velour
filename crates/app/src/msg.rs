@@ -1,6 +1,6 @@
 //! Messages the views send to the app.
 
-use sonora_ytm::{LikeStatus, Target, Track};
+use velour_ytm::{LikeStatus, Target, Track};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Root {
@@ -57,7 +57,7 @@ pub enum AppMsg {
     JumpTo(usize),
     RemoveFromQueue(usize),
     MoveInQueue(usize, usize),
-    Player(sonora_player::Event),
+    Player(velour_player::Event),
 
     // ---- library ----
     Rate(Track, LikeStatus),
@@ -121,6 +121,7 @@ pub enum SettingChange {
     LowMemory(bool),
     Browser(String),
     Downloads(bool),
+    SidebarPlaylists(bool),
     ClearCache,
     UpdateYtDlp,
 }

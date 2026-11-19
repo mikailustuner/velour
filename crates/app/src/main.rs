@@ -21,7 +21,7 @@ mod icon_names {
     pub use custom::*;
 }
 
-pub const APP_ID: &str = "dev.sonora.Sonora";
+pub const APP_ID: &str = "io.github.mikailustuner.Velour";
 
 fn main() {
     // Must be decided before GTK starts. An explicit GSK_RENDERER wins.

@@ -28,7 +28,7 @@ fn http() -> &'static reqwest::Client {
 /// URL variant close to `px` pixels so we never download or decode more than needed.
 pub fn url_for_size(url: &str, px: u32) -> String {
     if url.contains("googleusercontent.com") || url.contains("ggpht.com") {
-        return sonora_ytm::parse::sized_thumbnail(url, px);
+        return velour_ytm::parse::sized_thumbnail(url, px);
     }
     if let Some(rest) = url.split("i.ytimg.com/vi/").nth(1)
         && let Some(id) = rest.split('/').next()
@@ -89,7 +89,7 @@ fn load_inner<W: Target>(picture: &W, url: Option<&str>, px: u32, square: bool, 
     let url = url_for_size(url, px);
     let key = format!("{px}:{square}:{url}");
     // SAFETY: only `String` is ever stored under this key.
-    unsafe { picture.set_data("sonora-image", key.clone()) };
+    unsafe { picture.set_data("velour-image", key.clone()) };
 
     if let Some(tex) = CACHE.with(|c| c.borrow().0.get(&key).cloned()) {
         picture.show(Some(&tex));
@@ -110,7 +110,7 @@ fn load_inner<W: Target>(picture: &W, url: Option<&str>, px: u32, square: bool, 
         remember(&key, &tex);
         if let Some(p) = weak.upgrade() {
             // The widget may have been reused for another image meanwhile.
-            let current = unsafe { p.data::<String>("sonora-image").map(|d| d.as_ref().clone()) };
+            let current = unsafe { p.data::<String>("velour-image").map(|d| d.as_ref().clone()) };
             if current.as_deref() == Some(key.as_str()) {
                 p.show(Some(&tex));
                 if let Some(f) = done {

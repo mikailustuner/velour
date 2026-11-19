@@ -287,8 +287,9 @@ impl SidePanel {
             glib::idle_add_local_once(move || {
                 if let Some(p) = label.compute_point(&scroll.child().unwrap(), &gtk::graphene::Point::new(0.0, 0.0)) {
                     let adj = scroll.vadjustment();
-                    let target =
-                        (p.y() as f64 - adj.page_size() / 3.0).clamp(0.0, (adj.upper() - adj.page_size()).max(0.0));
+                    // The point is relative to the viewport, which is already scrolled.
+                    let target = (adj.value() + p.y() as f64 - adj.page_size() / 3.0)
+                        .clamp(0.0, (adj.upper() - adj.page_size()).max(0.0));
                     adj.set_value(target);
                 }
             });

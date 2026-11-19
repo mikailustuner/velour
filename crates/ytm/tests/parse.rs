@@ -1,4 +1,4 @@
-//! Parser tests against real responses saved by `cargo run -p sonora-ytm --example dump`.
+//! Parser tests against real responses saved by `cargo run -p velour-ytm --example dump`.
 //!
 //! `fixtures/public` is fetched signed out and committed, so those tests always run.
 //! `fixtures/private` comes from your own account and is gitignored; those tests skip
@@ -6,7 +6,7 @@
 //! re-dumping on another day or account keeps them valid.
 
 use serde_json::Value;
-use sonora_ytm::*;
+use velour_ytm::*;
 
 fn load(kind: &str, name: &str) -> Option<Value> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{kind}/{name}.json"));

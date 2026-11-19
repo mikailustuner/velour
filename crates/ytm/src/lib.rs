@@ -1,4 +1,4 @@
-//! YouTube Music access for Sonora.
+//! YouTube Music access for Velour.
 
 pub mod api;
 pub mod auth;

@@ -1,12 +1,12 @@
 //! Dev check: resolve two tracks and play them back-to-back gaplessly (ao=null by default).
-//! Run: cargo run -p sonora-player --example play -- [ao]
+//! Run: cargo run -p velour-player --example play -- [ao]
 
-use sonora_player::{Event, Player, Resolver};
 use std::sync::mpsc;
+use velour_player::{Event, Player, Resolver};
 
 fn main() -> anyhow::Result<()> {
     let ao = std::env::args().nth(1).unwrap_or_else(|| "null".into());
-    let profile = sonora_ytm::auth::default_firefox_profile()?;
+    let profile = velour_ytm::auth::default_firefox_profile()?;
     let resolver = Resolver::new(format!("firefox:{}", profile.display()));
 
     let t = std::time::Instant::now();

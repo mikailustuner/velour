@@ -1,8 +1,8 @@
 //! Lyrics: synced lines from LRCLIB when available, plain text from YouTube Music otherwise.
 
 use serde::Deserialize;
-use sonora_ytm::Track;
 use std::time::Duration;
+use velour_ytm::Track;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lyrics {
@@ -67,7 +67,7 @@ pub fn active_line(lines: &[(f64, String)], pos: f64) -> Option<usize> {
     i.checked_sub(1)
 }
 
-pub async fn fetch(http: &reqwest::Client, ytm: &sonora_ytm::Client, track: &Track) -> LyricsResult {
+pub async fn fetch(http: &reqwest::Client, ytm: &velour_ytm::Client, track: &Track) -> LyricsResult {
     if let Some(r) = fetch_lrclib(http, track).await {
         return r;
     }
@@ -82,7 +82,7 @@ async fn fetch_lrclib(http: &reqwest::Client, track: &Track) -> Option<LyricsRes
     let mut req = http
         .get("https://lrclib.net/api/get")
         .timeout(Duration::from_secs(8))
-        .header("User-Agent", "Sonora/0.1 (Linux desktop music player)")
+        .header("User-Agent", "Velour/0.1 (Linux desktop music player)")
         .query(&[("track_name", track.title.as_str()), ("artist_name", artist.as_str())]);
     if let Some(album) = &track.album {
         req = req.query(&[("album_name", album.name.as_str())]);

@@ -8,9 +8,9 @@ use crate::widgets::{fmt_duration, icon_button, set_icon_button, small_cover};
 use gtk::glib;
 use gtk::prelude::*;
 use relm4::Sender;
-use sonora_ytm::{LikeStatus, Track};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use velour_ytm::{LikeStatus, Track};
 
 pub struct PlayerBar {
     pub root: gtk::CenterBox,
@@ -43,7 +43,7 @@ pub struct PlayerBar {
 fn set_glow(provider: &gtk::CssProvider, color: Option<(u8, u8, u8)>) {
     let css = match color {
         Some((r, g, b)) => format!(
-            "window.sonora {{ --cover-glow: rgba({r},{g},{b},0.50); --cover-tint: rgba({r},{g},{b},0.24); --cover-tint-strong: rgba({r},{g},{b},0.30); --glow-a: rgba({r},{g},{b},0.08); }}"
+            "window.velour {{ --cover-glow: rgba({r},{g},{b},0.50); --cover-tint: rgba({r},{g},{b},0.24); --cover-tint-strong: rgba({r},{g},{b},0.30); --glow-a: rgba({r},{g},{b},0.08); }}"
         ),
         None => String::new(),
     };

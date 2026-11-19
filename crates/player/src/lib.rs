@@ -1,4 +1,4 @@
-//! Audio playback for Sonora: libmpv for decoding/output, yt-dlp for stream URLs.
+//! Audio playback for Velour: libmpv for decoding/output, yt-dlp for stream URLs.
 
 mod resolver;
 
@@ -61,7 +61,7 @@ impl Player {
                 ("demuxer-max-bytes", "16MiB"),
                 ("demuxer-max-back-bytes", "4MiB"),
                 ("network-timeout", "20"),
-                ("audio-client-name", "Sonora"),
+                ("audio-client-name", "Velour"),
                 ("volume-max", "100"),
             ] {
                 init.set_property(k, v)?;
@@ -82,7 +82,7 @@ impl Player {
         }
 
         let events = mpv.clone();
-        std::thread::Builder::new().name("sonora-mpv-events".into()).spawn(move || {
+        std::thread::Builder::new().name("velour-mpv-events".into()).spawn(move || {
             let mut last_pos = -1.0f64;
             let mut last_emit = Instant::now();
             loop {

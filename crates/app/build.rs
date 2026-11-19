@@ -3,7 +3,7 @@ fn main() {
     // (the shipped sets overlap on names like `explore` and `person`).
     relm4_icons_build::bundle_icons(
         "icon_names.rs",
-        Some("dev.sonora.Sonora"),
+        Some("io.github.mikailustuner.Velour"),
         None::<&str>,
         Some("icons"),
         [] as [&str; 0],

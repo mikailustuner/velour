@@ -1,4 +1,4 @@
-# Sonora roadmap
+# Velour roadmap
 
 Each phase ends with a check that proves it works on the real account.
 

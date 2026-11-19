@@ -8,10 +8,10 @@ use gtk::gio;
 use gtk::glib;
 use mpris_server::{LoopStatus, Metadata, PlaybackStatus, Player, Time, TrackId};
 use relm4::Sender;
-use sonora_ytm::Track;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
+use velour_ytm::Track;
 
 /// Last state sent to MPRIS, replayed when the bus connection becomes ready.
 #[derive(Default)]
@@ -66,9 +66,9 @@ impl Integrations {
     fn start_mpris(&self) {
         let (slot, s, state) = (self.mpris.clone(), self.sender.clone(), self.mpris_state.clone());
         glib::spawn_future_local(async move {
-            let player = match Player::builder("sonora")
-                .identity("Sonora")
-                .desktop_entry("dev.sonora.Sonora")
+            let player = match Player::builder("velour")
+                .identity("Velour")
+                .desktop_entry("io.github.mikailustuner.Velour")
                 .can_play(true)
                 .can_pause(true)
                 .can_go_next(true)
@@ -82,7 +82,7 @@ impl Integrations {
             {
                 Ok(p) => Rc::new(p),
                 Err(e) => {
-                    eprintln!("sonora: MPRIS unavailable: {e}");
+                    eprintln!("velour: MPRIS unavailable: {e}");
                     return;
                 }
             };
@@ -166,7 +166,7 @@ impl Integrations {
         let Some(p) = self.mpris.borrow().clone() else { return };
         glib::spawn_future_local(async move {
             if let Err(e) = f(p).await {
-                eprintln!("sonora: MPRIS update: {e}");
+                eprintln!("velour: MPRIS update: {e}");
             }
         });
     }
@@ -281,10 +281,10 @@ impl Integrations {
             let Ok(bus) = gio::bus_get_future(gio::BusType::Session).await else { return };
             let replaces = *id_cell.borrow();
             let hints = glib::VariantDict::new(None);
-            hints.insert("desktop-entry", "dev.sonora.Sonora");
+            hints.insert("desktop-entry", "io.github.mikailustuner.Velour");
             hints.insert("transient", true);
             let args = glib::Variant::tuple_from_iter([
-                "Sonora".to_variant(),
+                "Velour".to_variant(),
                 replaces.to_variant(),
                 "audio-x-generic".to_variant(),
                 title.to_variant(),
@@ -311,7 +311,7 @@ impl Integrations {
                         *id_cell.borrow_mut() = id;
                     }
                 }
-                Err(e) => eprintln!("sonora: notification failed (is a notification daemon running?): {e}"),
+                Err(e) => eprintln!("velour: notification failed (is a notification daemon running?): {e}"),
             }
         });
     }
@@ -325,7 +325,7 @@ impl Integrations {
                 .current
                 .as_ref()
                 .map(|t| format!("{} — {}", t.title, t.artist_line()))
-                .unwrap_or_else(|| "Sonora".into()),
+                .unwrap_or_else(|| "Velour".into()),
             playing: self.playing,
         }
     }
@@ -337,7 +337,7 @@ impl Integrations {
             use ksni::TrayMethods;
             match tray.spawn().await {
                 Ok(h) => s.emit(AppMsg::TrayReady(TrayHandle(h))),
-                Err(e) => eprintln!("sonora: tray unavailable (needs a StatusNotifier host): {e}"),
+                Err(e) => eprintln!("velour: tray unavailable (needs a StatusNotifier host): {e}"),
             }
         });
     }
@@ -383,7 +383,7 @@ impl Integrations {
 }
 
 fn metadata(t: &Track) -> Metadata {
-    let id = format!("/dev/sonora/track/{}", t.video_id.replace('-', "_"));
+    let id = format!("/io/github/mikailustuner/Velour/track/{}", t.video_id.replace('-', "_"));
     let mut b = Metadata::builder()
         .trackid(TrackId::try_from(id).unwrap_or(TrackId::NO_TRACK))
         .title(t.title.clone())
@@ -420,13 +420,13 @@ pub struct Tray {
 
 impl ksni::Tray for Tray {
     fn id(&self) -> String {
-        "sonora".into()
+        "velour".into()
     }
     fn title(&self) -> String {
         self.title.clone()
     }
     fn icon_name(&self) -> String {
-        "dev.sonora.Sonora".into()
+        "io.github.mikailustuner.Velour".into()
     }
     fn activate(&mut self, _x: i32, _y: i32) {
         self.sender.emit(AppMsg::ShowWindow);
@@ -446,7 +446,7 @@ impl ksni::Tray for Tray {
             item("Next", || AppMsg::Next),
             item("Previous", || AppMsg::Prev),
             ksni::MenuItem::Separator,
-            item("Show Sonora", || AppMsg::ShowWindow),
+            item("Show Velour", || AppMsg::ShowWindow),
             item("Quit", || AppMsg::Quit),
         ]
     }
@@ -457,7 +457,7 @@ fn discord_worker(app_id: String) -> mpsc::Sender<Option<(String, String, i64)>>
     use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
     let (tx, rx) = mpsc::channel::<Option<(String, String, i64)>>();
     std::thread::Builder::new()
-        .name("sonora-discord".into())
+        .name("velour-discord".into())
         .spawn(move || {
             let mut client = DiscordIpcClient::new(&app_id);
             let mut connected = false;
@@ -471,7 +471,7 @@ fn discord_worker(app_id: String) -> mpsc::Sender<Option<(String, String, i64)>>
                     connected = client.connect().is_ok();
                     if !connected {
                         if !warned {
-                            eprintln!("sonora: Discord not reachable (is the desktop app running?)");
+                            eprintln!("velour: Discord not reachable (is the desktop app running?)");
                             warned = true;
                         }
                         continue;

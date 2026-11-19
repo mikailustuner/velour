@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=Sonora
+Name=Velour
 GenericName=Music Player
 Comment=Lightweight YouTube Music player
-Exec=sonora
-Icon=dev.sonora.Sonora
+Exec=velour
+Icon=io.github.mikailustuner.Velour
 Terminal=false
 Categories=AudioVideo;Audio;Player;GTK;
 Keywords=youtube;music;player;streaming;
-StartupWMClass=dev.sonora.Sonora
+StartupWMClass=io.github.mikailustuner.Velour
 SingleMainWindow=true

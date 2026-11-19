@@ -11,7 +11,7 @@ pub fn build(
     s: &Settings,
     sender: &Sender<AppMsg>,
     account: &str,
-    health: Option<&sonora_player::Health>,
+    health: Option<&velour_player::Health>,
 ) -> gtk::Widget {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 28);
     page.add_css_class("page");
@@ -53,8 +53,16 @@ pub fn build(
 
     switch(
         &g,
+        "Show playlists in the sidebar",
+        Some("Turn off to keep playlist names private, e.g. while sharing your screen."),
+        s.sidebar_playlists,
+        sender,
+        SettingChange::SidebarPlaylists,
+    );
+    switch(
+        &g,
         "Keep playing when the window is closed",
-        Some("Run Sonora again to bring the window back."),
+        Some("Run Velour again to bring the window back."),
         s.close_to_background,
         sender,
         SettingChange::CloseToBackground,
@@ -180,7 +188,7 @@ pub fn build(
 
     // ---- account ----
     let g = group(&page, "Account");
-    let browsers = sonora_ytm::Cookies::BROWSERS;
+    let browsers = velour_ytm::Cookies::BROWSERS;
     let names: Vec<String> = browsers.iter().map(|b| capitalize(b)).collect();
     let names_ref: Vec<&str> = names.iter().map(String::as_str).collect();
     let browser = gtk::DropDown::from_strings(&names_ref);
@@ -188,7 +196,7 @@ pub fn build(
     {
         let s = sender.clone();
         browser.connect_selected_notify(move |d| {
-            if let Some(b) = sonora_ytm::Cookies::BROWSERS.get(d.selected() as usize) {
+            if let Some(b) = velour_ytm::Cookies::BROWSERS.get(d.selected() as usize) {
                 s.emit(AppMsg::Settings(SettingChange::Browser(b.to_string())));
             }
         });
@@ -197,7 +205,7 @@ pub fn build(
     row(
         &g,
         "Sign in with browser",
-        Some(&format!("{who}. Sonora uses the browser’s YouTube Music session; nothing is stored or sent elsewhere.")),
+        Some(&format!("{who}. Velour uses the browser’s YouTube Music session; nothing is stored or sent elsewhere.")),
         &browser,
     );
 
@@ -205,9 +213,9 @@ pub fn build(
     let g = group(&page, "About");
     row(
         &g,
-        &format!("Sonora {}", env!("CARGO_PKG_VERSION")),
+        &format!("Velour {}", env!("CARGO_PKG_VERSION")),
         Some(
-            "Space play/pause · Ctrl+←/→ previous/next · Shift+←/→ seek · Ctrl+↑/↓ volume · M mute · Ctrl+L like · Ctrl+F search · Alt+← back · Ctrl+Q quit",
+            "Unofficial, open-source player (GPL-3.0). Not affiliated with, endorsed or sponsored by YouTube or Google. Synced lyrics: LRCLIB.\n\nSpace play/pause · Ctrl+←/→ previous/next · Shift+←/→ seek · Ctrl+↑/↓ volume · M mute · P now playing · Ctrl+L like · Ctrl+F search · Alt+← back · Ctrl+Q quit",
         ),
         &gtk::Box::new(gtk::Orientation::Horizontal, 0),
     );

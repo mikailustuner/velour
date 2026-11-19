@@ -1,7 +1,11 @@
 [package]
-name = "sonora"
+name = "velour"
 version = "0.1.0"
 edition = "2024"
+description = "Lightweight native desktop player for YouTube Music (unofficial)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/mikailustuner/velour"
+publish = false
 
 [dependencies]
 anyhow = "1.0.104"
@@ -18,8 +22,8 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls", 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha1 = "0.11.0"
-sonora-player = { version = "0.1.0", path = "../player" }
-sonora-ytm = { version = "0.1.0", path = "../ytm" }
+velour-player = { version = "0.1.0", path = "../player" }
+velour-ytm = { version = "0.1.0", path = "../ytm" }
 tokio = { version = "1.54.1", features = ["rt", "time", "sync", "fs", "process"] }
 
 [build-dependencies]

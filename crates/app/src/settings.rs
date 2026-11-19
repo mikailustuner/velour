@@ -9,7 +9,7 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(fallback))
-        .join("sonora")
+        .join("velour")
 }
 
 pub fn config_dir() -> PathBuf {
@@ -50,6 +50,8 @@ pub struct Settings {
     pub download_dir: PathBuf,
     /// Record plays in the YouTube Music history (improves recommendations).
     pub send_history: bool,
+    /// List the user's playlists in the sidebar (off is handy when sharing the screen).
+    pub sidebar_playlists: bool,
     /// Offline downloads are opt-in (personal use only; see README).
     pub downloads: bool,
     /// Browser to take the YouTube Music sign-in from.
@@ -72,11 +74,12 @@ impl Default for Settings {
             discord: false,
             discord_app_id: String::new(),
             eq_preset: "Flat".into(),
-            download_dir: music.join("Sonora"),
+            download_dir: music.join("Velour"),
             send_history: true,
             low_memory: false,
             browser: "firefox".into(),
             downloads: false,
+            sidebar_playlists: true,
         }
     }
 }
@@ -126,6 +129,6 @@ pub fn write_json<T: Serialize>(path: &PathBuf, value: &T) {
         Ok(())
     })();
     if let Err(e) = result {
-        eprintln!("sonora: could not save {}: {e:#}", path.display());
+        eprintln!("velour: could not save {}: {e:#}", path.display());
     }
 }

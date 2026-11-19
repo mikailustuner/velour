@@ -1,7 +1,11 @@
 [package]
-name = "sonora-player"
+name = "velour-player"
 version = "0.1.0"
 edition = "2024"
+description = "libmpv playback and yt-dlp stream lookup used by Velour"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/mikailustuner/velour"
+publish = false
 
 [dependencies]
 anyhow = "1.0.104"
@@ -9,4 +13,4 @@ libc = "0.2.191"
 libmpv2 = "7.0.1"
 
 [dev-dependencies]
-sonora-ytm = { path = "../ytm" }
+velour-ytm = { path = "../ytm" }
