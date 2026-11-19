@@ -1,0 +1,653 @@
+/* Sonora — Tiphys-style theme (see docs/design.md).
+   Dark: pure black canvas, soft static color glows, translucent cards with hairline borders,
+   large radii, indigo accent. No backdrop blur (GTK can't do it cheaply); depth comes from
+   layered translucency instead. Light mode mirrors Tiphys light. */
+
+window.sonora {
+  --bg: #000000;
+  --card: rgba(255, 255, 255, 0.06);
+  --card-strong: rgba(255, 255, 255, 0.09);
+  --card-border: rgba(255, 255, 255, 0.12);
+  --hover: rgba(255, 255, 255, 0.07);
+  --press: rgba(255, 255, 255, 0.12);
+  --hairline: rgba(255, 255, 255, 0.10);
+  --text: #F5F5F7;
+  --text2: #98989F;
+  --accent: #A5B4FC;
+  --accent-tile: rgba(94, 92, 230, 0.30);
+  --accent-tile-border: rgba(165, 180, 252, 0.28);
+  --on-accent: #111114;
+  --solid: #F5F5F7;
+  --on-solid: #000000;
+  --popover: #1C1C1E;
+  --focus: #A5B4FC;
+  --danger: #FF6961;
+  --glow-a: rgba(94, 92, 230, 0.07);
+  --glow-b: rgba(255, 140, 90, 0.035);
+  /* Glass: a faint top-lit gradient plus a bright top edge. */
+  --glass-top: rgba(255, 255, 255, 0.075);
+  --glass-bottom: rgba(255, 255, 255, 0.03);
+  --glass-edge: rgba(255, 255, 255, 0.10);
+  --shadow: rgba(0, 0, 0, 0.35);
+  /* Overridden per track from the cover art (see player_bar.rs). */
+  --cover-glow: rgba(0, 0, 0, 0);
+  --cover-tint: rgba(0, 0, 0, 0);
+}
+
+@media (prefers-color-scheme: light) {
+  window.sonora {
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --card-strong: #FFFFFF;
+    --card-border: rgba(0, 0, 0, 0.0);
+    --hover: rgba(0, 0, 0, 0.05);
+    --press: rgba(0, 0, 0, 0.09);
+    --hairline: #E5E5EA;
+    --text: #111114;
+    --text2: #6C6C70;
+    --accent: #4338CA;
+    --accent-tile: #1E1B4B;
+    --accent-tile-border: rgba(0, 0, 0, 0.0);
+    --on-accent: #FFFFFF;
+    --solid: #111114;
+    --on-solid: #FFFFFF;
+    --popover: #FFFFFF;
+    --focus: #4338CA;
+    --danger: #C62828;
+    --glow-a: rgba(67, 56, 202, 0.06);
+    --glow-b: rgba(255, 140, 90, 0.05);
+    --glass-top: rgba(255, 255, 255, 0.95);
+    --glass-bottom: rgba(255, 255, 255, 0.80);
+    --glass-edge: rgba(255, 255, 255, 1.0);
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+}
+
+window.sonora {
+  color: var(--text);
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 14px;
+  background-color: var(--bg);
+  /* Two static glows; drawn once, no per-frame cost. */
+  background-image:
+    radial-gradient(ellipse at 15% -10%, var(--glow-a), transparent 55%),
+    radial-gradient(ellipse at 95% 110%, var(--glow-b), transparent 45%);
+}
+
+window.sonora *:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.shell {
+  padding: 12px;
+}
+
+/* ---------- cards ---------- */
+
+.card,
+.sidebar,
+.now-playing,
+.side-panel {
+  background-color: transparent;
+  background-image: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  box-shadow: inset 0 1px var(--glass-edge), 0 10px 30px var(--shadow);
+}
+
+/* ---------- sidebar ---------- */
+
+.sidebar {
+  padding: 14px 10px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  margin: 2px 8px 14px 8px;
+}
+
+.sidebar searchentry {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  min-height: 36px;
+  margin: 0 2px 12px 2px;
+  box-shadow: none;
+}
+
+.sidebar list {
+  background: transparent;
+}
+
+.sidebar row {
+  border-radius: 14px;
+  padding: 8px 10px;
+  min-height: 22px;
+  color: var(--text);
+  transition: background 150ms ease-out;
+}
+
+.sidebar row:hover {
+  background: var(--hover);
+}
+
+.sidebar row:selected {
+  background: var(--solid);
+  color: var(--on-solid);
+  font-weight: 600;
+}
+
+.sidebar row:selected image {
+  color: var(--on-solid);
+}
+
+.section-label {
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  margin: 18px 10px 6px 10px;
+}
+
+.sidebar.collapsed row {
+  padding: 10px;
+}
+
+/* ---------- content ---------- */
+
+/* Top padding leaves room for the floating back button. */
+.page {
+  padding: 60px 36px 40px 36px;
+}
+
+.large-title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.caption {
+  font-size: 12px;
+}
+
+.dim,
+.empty-body,
+.description {
+  color: var(--text2);
+}
+
+.tnum,
+.time {
+  font-feature-settings: "tnum";
+}
+
+.headline {
+  font-weight: 700;
+}
+
+.description {
+  margin-top: 4px;
+}
+
+/* ---------- buttons ---------- */
+
+button.icon {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 12px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  color: var(--text);
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+
+button.icon:hover,
+button.icon:checked {
+  background: var(--hover);
+}
+
+button.icon.dim {
+  color: var(--text2);
+}
+
+button.icon.liked,
+button.icon.active {
+  color: var(--accent);
+}
+
+button.play {
+  background: var(--solid);
+  color: var(--on-solid);
+  border: none;
+  box-shadow: none;
+  border-radius: 999px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  transition: opacity 150ms ease-out;
+}
+
+button.play:hover {
+  opacity: 0.88;
+}
+
+button.pill {
+  border-radius: 14px;
+  padding: 7px 16px;
+  min-height: 34px;
+  background: var(--card-strong);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  box-shadow: none;
+  font-weight: 700;
+  transition: background 150ms ease-out, opacity 150ms ease-out;
+}
+
+button.pill:hover {
+  background: var(--press);
+}
+
+button.pill.primary {
+  background: var(--solid);
+  color: var(--on-solid);
+  border-color: transparent;
+}
+
+button.pill.primary:hover {
+  opacity: 0.88;
+}
+
+button.pill.destructive {
+  background: var(--danger);
+  color: #FFFFFF;
+  border-color: transparent;
+}
+
+button.link-button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+
+button.link-button:hover {
+  color: var(--text);
+}
+
+button.back {
+  background: var(--card-strong);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+}
+
+/* Secondary row controls appear on hover/focus to keep lists calm. */
+/* Matches both plain buttons and menubuttons (⋯). */
+.track-row .hover-only {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.track-row:hover .hover-only,
+.track-row:focus-within .hover-only,
+.track-row .hover-only:focus-within,
+.track-row menubutton.hover-only:checked {
+  opacity: 1;
+}
+
+menubutton.icon > button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 12px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  color: var(--text);
+}
+
+menubutton.icon > button:hover,
+menubutton.icon > button:checked {
+  background: var(--hover);
+}
+
+/* ---------- covers & tiles ---------- */
+
+menubutton.tile-more {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+menubutton.tile-more > button {
+  background: rgba(0, 0, 0, 0.55);
+  color: #FFFFFF;
+  border-radius: 999px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+button.tile:hover menubutton.tile-more,
+menubutton.tile-more:focus-within {
+  opacity: 1;
+}
+
+picture.cover,
+.cover-box {
+  border-radius: 16px;
+  background: var(--card-strong);
+}
+
+picture.cover-round {
+  border-radius: 999px;
+  background: var(--card-strong);
+}
+
+.thumb,
+.cover-small {
+  border-radius: 10px;
+  background: var(--card-strong);
+  color: var(--text2);
+}
+
+.page-header picture.cover {
+  border-radius: 22px;
+}
+
+button.tile {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 8px;
+  border-radius: 20px;
+  transition: background 150ms ease-out;
+}
+
+button.tile:hover {
+  background: var(--hover);
+}
+
+.tile-title {
+  font-weight: 700;
+}
+
+button.chip {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow: none;
+  border-radius: 16px;
+  padding: 12px 18px;
+  min-width: 150px;
+  font-weight: 700;
+}
+
+button.chip:hover {
+  background: var(--press);
+}
+
+scrolledwindow.carousel {
+  padding-bottom: 6px;
+}
+
+/* ---------- track lists (grouped in a card) ---------- */
+
+list.tracks {
+  background-color: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  padding: 6px;
+}
+
+row.track-row {
+  border-radius: 14px;
+  padding: 8px 10px;
+  transition: background 120ms ease-out;
+}
+
+row.track-row:hover {
+  background: var(--hover);
+}
+
+row.track-row.playing {
+  background: var(--accent-tile);
+  box-shadow: inset 0 0 0 1px var(--accent-tile-border);
+}
+
+row.track-row.playing .row-title {
+  color: var(--accent);
+}
+
+row.track-row.played {
+  opacity: 0.55;
+}
+
+row.track-row.unavailable {
+  opacity: 0.4;
+}
+
+.row-title {
+  font-weight: 600;
+}
+
+label.album-col {
+  margin: 0 8px;
+}
+
+label link {
+  color: inherit;
+  text-decoration-line: none;
+}
+
+label link:hover {
+  text-decoration-line: underline;
+}
+
+/* ---------- loading ---------- */
+
+.skeleton {
+  background: var(--card-strong);
+  border-radius: 8px;
+}
+
+/* ---------- now-playing bar ---------- */
+
+.now-playing {
+  min-height: 76px;
+  padding: 0 14px;
+  border-radius: 26px;
+  /* Cover-colored light: a tint from the left and a soft halo around the card. */
+  background-image:
+    linear-gradient(90deg, var(--cover-tint), transparent 55%),
+    linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  box-shadow: inset 0 1px var(--glass-edge), 0 0 48px -2px var(--cover-glow), 0 10px 30px var(--shadow);
+  transition: box-shadow 600ms ease-out;
+}
+
+.track-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.track-artist,
+.time {
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+window.sonora scale.progress trough,
+window.sonora scale.volume trough {
+  background: var(--hairline);
+  min-height: 4px;
+  border-radius: 2px;
+}
+
+window.sonora scale.progress trough highlight,
+window.sonora scale.volume trough highlight {
+  margin: 0;
+  background-image: none;
+  background-color: var(--accent);
+  border: none;
+  border-radius: 2px;
+}
+
+window.sonora scale.volume trough highlight {
+  background-color: var(--text2);
+}
+
+window.sonora scale.progress trough slider,
+window.sonora scale.volume trough slider {
+  background: var(--solid);
+  min-width: 12px;
+  min-height: 12px;
+  margin: -4px;
+  border-radius: 999px;
+  border: none;
+  box-shadow: none;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+window.sonora scale.progress:hover trough slider,
+window.sonora scale.volume:hover trough slider,
+window.sonora scale:focus-visible trough slider {
+  opacity: 1;
+}
+
+/* ---------- menus & popovers ---------- */
+
+popover > contents {
+  background: var(--popover);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.30);
+}
+
+popover.menu > contents {
+  padding: 6px;
+  min-width: 230px;
+}
+
+popover entry {
+  border-radius: 12px;
+}
+
+button.menu-item {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-weight: 500;
+}
+
+button.menu-item:hover {
+  background: var(--hover);
+}
+
+/* ---------- side panel ---------- */
+
+.side-panel {
+  padding: 20px 12px 12px 16px;
+}
+
+.lyrics {
+  padding: 4px 4px 48px 0;
+}
+
+label.lyric-line {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text2);
+  opacity: 0.5;
+  transition: opacity 200ms ease-out, color 200ms ease-out;
+}
+
+label.lyric-line.active {
+  color: var(--text);
+  opacity: 1;
+}
+
+label.lyric-plain {
+  font-size: 15px;
+}
+
+/* ---------- toast ---------- */
+
+.toast {
+  background: var(--popover);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+}
+
+/* ---------- segmented (Tiphys tab-bar pill) ---------- */
+
+.segmented {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.segmented button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 999px;
+  padding: 6px 18px;
+  min-height: 26px;
+  color: var(--text2);
+  font-weight: 600;
+}
+
+.segmented button:checked {
+  background: var(--solid);
+  color: var(--on-solid);
+}
+
+/* ---------- settings ---------- */
+
+list.settings-group {
+  background-color: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+}
+
+list.settings-group > row {
+  border-bottom: 1px solid var(--hairline);
+}
+
+list.settings-group > row:last-child {
+  border-bottom: none;
+}
+
+.settings-row {
+  padding: 14px 16px;
+}
+
+window.sonora dropdown > button,
+window.sonora entry {
+  border-radius: 12px;
+}
+
+window.sonora switch:checked {
+  background: var(--accent);
+}
