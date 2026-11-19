@@ -41,21 +41,66 @@ already sees, and audio through libmpv.
   and a JavaScript runtime, **[deno](https://deno.com)**, in `~/.local/bin` or `PATH`
 - A browser where you're signed in to music.youtube.com
 
-Velour checks these on start and tells you if something is missing or outdated. When songs
-suddenly stop playing, update yt-dlp (Settings → Playback helpers → Update, or `yt-dlp -U`).
+### Installing yt-dlp and deno
+
+Velour needs a **current** yt-dlp; distribution packages are often months old and stop working
+with YouTube. Install the official self-updating binary and deno into `~/.local/bin` (no sudo):
+
+```bash
+mkdir -p ~/.local/bin
+
+# yt-dlp (standalone Linux binary; includes everything it needs)
+curl -L -o ~/.local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+chmod +x ~/.local/bin/yt-dlp
+
+# deno (JavaScript runtime yt-dlp uses for YouTube)
+curl -L -o /tmp/deno.zip https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip
+unzip -o /tmp/deno.zip -d ~/.local/bin && rm /tmp/deno.zip
+
+# check (open a new terminal first if ~/.local/bin was just created)
+yt-dlp --version && deno --version
+```
+
+If `~/.local/bin` is not in your `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to your shell
+profile. On ARM64 use `yt-dlp_linux_aarch64` and `deno-aarch64-unknown-linux-gnu.zip`.
+
+Velour checks both on start and tells you if something is missing or outdated. When songs
+suddenly stop playing, update yt-dlp: Settings → Playback helpers → Update, or `yt-dlp -U`.
 
 ## Install
 
+### Option 1: .deb package (Debian testing/sid)
+
+Download the latest `velour_*_amd64.deb` from
+[Releases](https://github.com/mikailustuner/velour/releases/latest), then:
+
 ```bash
-git clone https://github.com/mikailustuner/velour && cd velour
-./scripts/install.sh        # builds and installs into ~/.local (no sudo)
-# or
-./scripts/build-deb.sh      # builds target/deb/velour_<version>_amd64.deb
-sudo apt install ./target/deb/velour_*_amd64.deb
+sudo apt install ./velour_*_amd64.deb
 ```
 
-Building needs Rust (stable), `pkg-config`, `libgtk-4-dev` and `libmpv-dev`. Builds run at low
-CPU priority with 4 jobs so the desktop stays responsive.
+Then install yt-dlp and deno as shown above. The package is built on Debian sid; on other
+distributions (or if apt reports missing dependencies) use option 2.
+
+### Option 2: build from source
+
+```bash
+sudo apt install build-essential pkg-config libgtk-4-dev libmpv-dev ffmpeg   # Debian/Ubuntu
+curl -fsSL https://sh.rustup.rs | sh                                         # if Rust isn't installed
+git clone https://github.com/mikailustuner/velour && cd velour
+./scripts/install.sh        # builds and installs into ~/.local (no sudo)
+```
+
+`./scripts/build-deb.sh` builds the .deb instead (`target/deb/`). Builds run at low CPU priority
+with 4 jobs so the desktop stays responsive.
+
+### Uninstall
+
+```bash
+rm ~/.local/bin/velour ~/.local/share/applications/io.github.mikailustuner.Velour.desktop \
+   ~/.local/share/icons/hicolor/scalable/apps/io.github.mikailustuner.Velour.svg
+rm -r ~/.local/share/fonts/velour ~/.config/velour ~/.cache/velour ~/.local/state/velour   # settings and caches
+# or, for the .deb: sudo apt remove velour
+```
 
 ## Usage
 
