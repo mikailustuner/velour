@@ -9,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
-const MEMORY_ENTRIES: usize = 300;
+const MEMORY_ENTRIES: usize = 200;
 
 thread_local! {
     static CACHE: RefCell<(HashMap<String, gdk::Texture>, VecDeque<String>)> = RefCell::new(Default::default());
@@ -30,11 +30,11 @@ pub fn url_for_size(url: &str, px: u32) -> String {
     if url.contains("googleusercontent.com") || url.contains("ggpht.com") {
         return sonora_ytm::parse::sized_thumbnail(url, px);
     }
-    if let Some(rest) = url.split("i.ytimg.com/vi/").nth(1) {
-        if let Some(id) = rest.split('/').next() {
-            let name = if px <= 320 { "mqdefault.jpg" } else { "hqdefault.jpg" };
-            return format!("https://i.ytimg.com/vi/{id}/{name}");
-        }
+    if let Some(rest) = url.split("i.ytimg.com/vi/").nth(1)
+        && let Some(id) = rest.split('/').next()
+    {
+        let name = if px <= 320 { "mqdefault.jpg" } else { "hqdefault.jpg" };
+        return format!("https://i.ytimg.com/vi/{id}/{name}");
     }
     url.to_string()
 }
@@ -105,7 +105,8 @@ fn load_inner<W: Target>(picture: &W, url: Option<&str>, px: u32, square: bool, 
     glib::spawn_future_local(async move {
         let Ok(Some((w, h, rgba))) = job.await else { return };
         let bytes = glib::Bytes::from_owned(rgba);
-        let tex: gdk::Texture = gdk::MemoryTexture::new(w as i32, h as i32, gdk::MemoryFormat::R8g8b8a8, &bytes, w as usize * 4).upcast();
+        let tex: gdk::Texture =
+            gdk::MemoryTexture::new(w as i32, h as i32, gdk::MemoryFormat::R8g8b8a8, &bytes, w as usize * 4).upcast();
         remember(&key, &tex);
         if let Some(p) = weak.upgrade() {
             // The widget may have been reused for another image meanwhile.
@@ -179,7 +180,7 @@ pub fn accent_color(tex: &gdk::Texture) -> Option<(u8, u8, u8)> {
     let mut buf = vec![0u8; w * h * 4];
     tex.download(&mut buf, w * 4); // B8G8R8A8 premultiplied
     let (mut r, mut g, mut b, mut total) = (0f64, 0f64, 0f64, 0f64);
-    for px in buf.chunks_exact(4) {
+    for px in buf.as_chunks::<4>().0 {
         let (pb, pg, pr) = (px[0] as f64, px[1] as f64, px[2] as f64);
         let max = pr.max(pg).max(pb);
         let min = pr.min(pg).min(pb);
@@ -227,6 +228,9 @@ mod tests {
             url_for_size("https://lh3.googleusercontent.com/x=w60-h60-l90-rj", 160),
             "https://lh3.googleusercontent.com/x=w160-h160-l90-rj"
         );
-        assert_eq!(url_for_size("https://i.ytimg.com/vi/abc/hq720.jpg?sqp=1", 160), "https://i.ytimg.com/vi/abc/mqdefault.jpg");
+        assert_eq!(
+            url_for_size("https://i.ytimg.com/vi/abc/hq720.jpg?sqp=1", 160),
+            "https://i.ytimg.com/vi/abc/mqdefault.jpg"
+        );
     }
 }

@@ -198,7 +198,11 @@ impl SidePanel {
 
     pub fn set_queue_position(&self, pos: usize) {
         for (i, r) in self.queue_rows.iter().enumerate() {
-            if i == pos { r.add_css_class("playing") } else { r.remove_css_class("playing") }
+            if i == pos {
+                r.add_css_class("playing")
+            } else {
+                r.remove_css_class("playing")
+            }
             if i < pos { r.add_css_class("played") } else { r.remove_css_class("played") }
         }
     }
@@ -213,7 +217,9 @@ impl SidePanel {
 
     pub fn set_lyrics(&mut self, r: &LyricsResult) {
         self.clear_lyrics();
-        self.lyrics_source.set_label(&r.source.as_deref().map(|s| format!("Source: {}", s.trim_start_matches("Source: "))).unwrap_or_default());
+        self.lyrics_source.set_label(
+            &r.source.as_deref().map(|s| format!("Source: {}", s.trim_start_matches("Source: "))).unwrap_or_default(),
+        );
         match &r.lyrics {
             Lyrics::Synced(lines) => {
                 for (t, text) in lines {
@@ -281,7 +287,8 @@ impl SidePanel {
             glib::idle_add_local_once(move || {
                 if let Some(p) = label.compute_point(&scroll.child().unwrap(), &gtk::graphene::Point::new(0.0, 0.0)) {
                     let adj = scroll.vadjustment();
-                    let target = (p.y() as f64 - adj.page_size() / 3.0).clamp(0.0, (adj.upper() - adj.page_size()).max(0.0));
+                    let target =
+                        (p.y() as f64 - adj.page_size() / 3.0).clamp(0.0, (adj.upper() - adj.page_size()).max(0.0));
                     adj.set_value(target);
                 }
             });

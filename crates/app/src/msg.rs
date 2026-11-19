@@ -33,7 +33,11 @@ pub enum AppMsg {
     LoadMore,
 
     // ---- playback ----
-    PlayTracks { tracks: Vec<Track>, start: usize, shuffle: bool },
+    PlayTracks {
+        tracks: Vec<Track>,
+        start: usize,
+        shuffle: bool,
+    },
     PlayTarget(Target),
     /// Resolve a stream ahead of time (pointer resting on a song or Play button).
     Prefetch(String),
@@ -58,17 +62,32 @@ pub enum AppMsg {
     // ---- library ----
     Rate(Track, LikeStatus),
     RateCurrent,
-    AddToPlaylist { playlist_id: String, track: Track },
+    AddToPlaylist {
+        playlist_id: String,
+        track: Track,
+    },
     NewPlaylist(Option<Track>),
-    CreatePlaylist { title: String, tracks: Vec<Track> },
+    CreatePlaylist {
+        title: String,
+        tracks: Vec<Track>,
+    },
     /// Keep only the current song in the queue.
     ClearQueue,
     /// Save the queue as a new playlist (title asked first).
     SaveQueue,
-    RemoveFromPlaylist { playlist_id: String, track: Track },
-    RenamePlaylist { playlist_id: String, title: String },
+    RemoveFromPlaylist {
+        playlist_id: String,
+        track: Track,
+    },
+    RenamePlaylist {
+        playlist_id: String,
+        title: String,
+    },
     DeletePlaylist(String),
-    SaveToLibrary { playlist_id: String, save: bool },
+    SaveToLibrary {
+        playlist_id: String,
+        save: bool,
+    },
     Download(Vec<Track>),
     DeleteDownload(String),
 

@@ -7,7 +7,12 @@ use crate::settings::{Settings, Theme};
 use gtk::prelude::*;
 use relm4::Sender;
 
-pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Option<&sonora_player::Health>) -> gtk::Widget {
+pub fn build(
+    s: &Settings,
+    sender: &Sender<AppMsg>,
+    account: &str,
+    health: Option<&sonora_player::Health>,
+) -> gtk::Widget {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 28);
     page.add_css_class("page");
     page.append(&large_title("Settings"));
@@ -46,16 +51,51 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Optio
     }
     row(&g, "Equalizer", Some("Applied instantly to whatever is playing."), &eqd);
 
-    switch(&g, "Keep playing when the window is closed", Some("Run Sonora again to bring the window back."), s.close_to_background, sender, SettingChange::CloseToBackground);
-    switch(&g, "Add plays to YouTube Music history", Some("Helps YouTube Music recommendations. Counted after 30 seconds."), s.send_history, sender, SettingChange::SendHistory);
+    switch(
+        &g,
+        "Keep playing when the window is closed",
+        Some("Run Sonora again to bring the window back."),
+        s.close_to_background,
+        sender,
+        SettingChange::CloseToBackground,
+    );
+    switch(
+        &g,
+        "Add plays to YouTube Music history",
+        Some("Helps YouTube Music recommendations. Counted after 30 seconds."),
+        s.send_history,
+        sender,
+        SettingChange::SendHistory,
+    );
 
-    switch(&g, "Low memory mode", Some("Software rendering: about 160 MB less memory, but scrolling uses much more CPU. Applies after restart."), s.low_memory, sender, SettingChange::LowMemory);
+    switch(
+        &g,
+        "Low memory mode",
+        Some("Software rendering: about 160 MB less memory, but scrolling uses much more CPU. Applies after restart."),
+        s.low_memory,
+        sender,
+        SettingChange::LowMemory,
+    );
 
     // ---- desktop ----
     let g = group(&page, "Desktop");
-    switch(&g, "Notification on song change", Some("Needs a notification daemon (mako, dunst, swaync…)."), s.notifications, sender, SettingChange::Notifications);
+    switch(
+        &g,
+        "Notification on song change",
+        Some("Needs a notification daemon (mako, dunst, swaync…)."),
+        s.notifications,
+        sender,
+        SettingChange::Notifications,
+    );
     switch(&g, "Tray icon", Some("Needs a bar with a tray (e.g. waybar)."), s.tray, sender, SettingChange::Tray);
-    switch(&g, "Discord status", Some("Shows the current song on your Discord profile."), s.discord, sender, SettingChange::Discord);
+    switch(
+        &g,
+        "Discord status",
+        Some("Shows the current song on your Discord profile."),
+        s.discord,
+        sender,
+        SettingChange::Discord,
+    );
     let app_id = gtk::Entry::new();
     app_id.set_text(&s.discord_app_id);
     app_id.set_placeholder_text(Some("Discord application ID"));
@@ -75,7 +115,16 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Optio
 
     // ---- storage ----
     let g = group(&page, "Storage");
-    switch(&g, "Offline downloads", Some("Save songs for offline listening. Only for content you have the right to keep, for personal use; check YouTube’s terms first."), s.downloads, sender, SettingChange::Downloads);
+    switch(
+        &g,
+        "Offline downloads",
+        Some(
+            "Save songs for offline listening. Only for content you have the right to keep, for personal use; check YouTube’s terms first.",
+        ),
+        s.downloads,
+        sender,
+        SettingChange::Downloads,
+    );
     let dir = gtk::Button::with_label(&s.download_dir.display().to_string());
     dir.add_css_class("pill");
     {
@@ -145,11 +194,23 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Optio
         });
     }
     let who = if account.is_empty() { "Not signed in".to_string() } else { format!("Signed in as {account}") };
-    row(&g, "Sign in with browser", Some(&format!("{who}. Sonora uses the browser’s YouTube Music session; nothing is stored or sent elsewhere.")), &browser);
+    row(
+        &g,
+        "Sign in with browser",
+        Some(&format!("{who}. Sonora uses the browser’s YouTube Music session; nothing is stored or sent elsewhere.")),
+        &browser,
+    );
 
     // ---- about ----
     let g = group(&page, "About");
-    row(&g, &format!("Sonora {}", env!("CARGO_PKG_VERSION")), Some("Space play/pause · Ctrl+←/→ previous/next · Shift+←/→ seek · Ctrl+↑/↓ volume · M mute · Ctrl+L like · Ctrl+F search · Alt+← back · Ctrl+Q quit"), &gtk::Box::new(gtk::Orientation::Horizontal, 0));
+    row(
+        &g,
+        &format!("Sonora {}", env!("CARGO_PKG_VERSION")),
+        Some(
+            "Space play/pause · Ctrl+←/→ previous/next · Shift+←/→ seek · Ctrl+↑/↓ volume · M mute · Ctrl+L like · Ctrl+F search · Alt+← back · Ctrl+Q quit",
+        ),
+        &gtk::Box::new(gtk::Orientation::Horizontal, 0),
+    );
 
     let scroll = gtk::ScrolledWindow::new();
     scroll.set_hscrollbar_policy(gtk::PolicyType::Never);
@@ -158,7 +219,12 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Optio
 }
 
 fn group(page: &gtk::Box, title: &str) -> gtk::ListBox {
-    let l = gtk::Label::builder().label(title).css_classes(["section-title"]).xalign(0.0).accessible_role(gtk::AccessibleRole::Heading).build();
+    let l = gtk::Label::builder()
+        .label(title)
+        .css_classes(["section-title"])
+        .xalign(0.0)
+        .accessible_role(gtk::AccessibleRole::Heading)
+        .build();
     let list = gtk::ListBox::new();
     list.add_css_class("settings-group");
     list.set_selection_mode(gtk::SelectionMode::None);
@@ -199,7 +265,14 @@ fn row(list: &gtk::ListBox, title: &str, subtitle: Option<&str>, control: &impl 
     list.append(&r);
 }
 
-fn switch(list: &gtk::ListBox, title: &str, subtitle: Option<&str>, value: bool, sender: &Sender<AppMsg>, make: fn(bool) -> SettingChange) {
+fn switch(
+    list: &gtk::ListBox,
+    title: &str,
+    subtitle: Option<&str>,
+    value: bool,
+    sender: &Sender<AppMsg>,
+    make: fn(bool) -> SettingChange,
+) {
     let sw = gtk::Switch::new();
     sw.set_active(value);
     let s = sender.clone();

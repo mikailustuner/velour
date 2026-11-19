@@ -37,7 +37,14 @@ fn section<'a>(page: &'a Page, title: &str) -> &'a Section {
 }
 
 fn cards(page: &Page) -> Vec<&Card> {
-    page.sections.iter().flat_map(|s| &s.items).filter_map(|i| match i { Item::Card(c) => Some(c), _ => None }).collect()
+    page.sections
+        .iter()
+        .flat_map(|s| &s.items)
+        .filter_map(|i| match i {
+            Item::Card(c) => Some(c),
+            _ => None,
+        })
+        .collect()
 }
 
 fn assert_track_complete(t: &Track) {
@@ -69,7 +76,12 @@ fn home_has_titled_shelves() {
 fn explore_has_moods_with_params() {
     let p = parse::page(&public("explore"), "FEmusic_explore");
     let moods = section(&p, "Moods & genres");
-    assert!(moods.items.iter().all(|i| matches!(i, Item::Card(Card { target: Target::Browse { params: Some(_), .. }, .. }))));
+    assert!(
+        moods
+            .items
+            .iter()
+            .all(|i| matches!(i, Item::Card(Card { target: Target::Browse { params: Some(_), .. }, .. })))
+    );
     assert!(p.sections.iter().any(|s| s.title.contains("New")), "a new releases shelf");
 }
 
@@ -85,7 +97,12 @@ fn artist_page() {
     assert_eq!(top.layout, Layout::List);
     assert!(!top.items.is_empty());
     let albums = section(&p, "Albums");
-    assert!(albums.items.iter().all(|i| matches!(i, Item::Card(Card { target: Target::Browse { page_type: PageType::Album, .. }, .. }))));
+    assert!(
+        albums
+            .items
+            .iter()
+            .all(|i| matches!(i, Item::Card(Card { target: Target::Browse { page_type: PageType::Album, .. }, .. })))
+    );
 }
 
 #[test]
@@ -93,7 +110,11 @@ fn album_page() {
     let p = parse::page(&public("album"), "MPREb_nWmOXlZBVTL");
     let h = p.header.as_ref().unwrap();
     assert!(!h.title.is_empty());
-    assert!(h.subtitle.contains("Single") || h.subtitle.contains("Album") || h.subtitle.contains("EP"), "{}", h.subtitle);
+    assert!(
+        h.subtitle.contains("Single") || h.subtitle.contains("Album") || h.subtitle.contains("EP"),
+        "{}",
+        h.subtitle
+    );
     match &h.play {
         Some(Target::Watch { playlist_id: Some(id), .. }) => assert!(id.starts_with("OLAK"), "{id}"),
         other => panic!("album play target: {other:?}"),
@@ -124,7 +145,7 @@ fn search_groups_results() {
     for i in &songs.items {
         let Item::Track(t) = i else { panic!("non-track in Songs") };
         assert_track_complete(t);
-        assert!(t.detail.as_deref().map_or(true, |d| !d.starts_with("Episode")), "episodes are filtered");
+        assert!(t.detail.as_deref().is_none_or(|d| !d.starts_with("Episode")), "episodes are filtered");
     }
     for title in ["Albums", "Artists"] {
         assert!(!section(&p, title).items.is_empty());

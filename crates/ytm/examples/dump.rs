@@ -28,12 +28,19 @@ async fn main() -> anyhow::Result<()> {
 
 async fn public(dir: &Path) -> anyhow::Result<()> {
     let c = Client::anonymous().await?;
-    for (name, id) in [("home", "FEmusic_home"), ("explore", "FEmusic_explore"), ("artist", ARTIST), ("album", ALBUM), ("public_playlist", PLAYLIST)] {
+    for (name, id) in [
+        ("home", "FEmusic_home"),
+        ("explore", "FEmusic_explore"),
+        ("artist", ARTIST),
+        ("album", ALBUM),
+        ("public_playlist", PLAYLIST),
+    ] {
         save(dir, name, c.browse(id).await?);
     }
     save(dir, "search", c.call("search", json!({ "query": "tarkan" })).await?);
     save(dir, "next", c.call("next", json!({ "videoId": SONG, "isAudioOnly": true })).await?);
-    let radio = json!({ "videoId": SONG, "playlistId": format!("RDAMVM{SONG}"), "params": "wAEB", "isAudioOnly": true });
+    let radio =
+        json!({ "videoId": SONG, "playlistId": format!("RDAMVM{SONG}"), "params": "wAEB", "isAudioOnly": true });
     save(dir, "radio", c.call("next", radio).await?);
     Ok(())
 }
@@ -54,7 +61,10 @@ async fn private(dir: &Path) -> anyhow::Result<()> {
     let lib = c.library_playlists().await?;
     let own = lib.sections.iter().flat_map(|s| &s.items).find_map(|i| match i {
         Item::Card(Card { subtitle, target: Target::Browse { id, page_type: PageType::Playlist, .. }, .. })
-            if subtitle.contains(&account) && id != "VLLM" => Some(id.clone()),
+            if subtitle.contains(&account) && id != "VLLM" =>
+        {
+            Some(id.clone())
+        }
         _ => None,
     });
     match own {

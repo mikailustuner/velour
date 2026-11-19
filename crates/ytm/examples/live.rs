@@ -9,10 +9,18 @@ async fn main() -> anyhow::Result<()> {
     println!("home: {} sections, cont={}", home.sections.len(), home.continuation.is_some());
     if let Some(t) = &home.continuation {
         let more = c.more(t).await?;
-        println!("home more: {} sections {:?}", more.sections.len(), more.sections.iter().map(|s| &s.title).collect::<Vec<_>>());
+        println!(
+            "home more: {} sections {:?}",
+            more.sections.len(),
+            more.sections.iter().map(|s| &s.title).collect::<Vec<_>>()
+        );
     }
     let radio = c.radio("TtSr-J-SYMw").await?;
-    println!("radio: {} tracks, first={:?}", radio.tracks.len(), radio.tracks.first().map(|t| (&t.title, t.artist_line())));
+    println!(
+        "radio: {} tracks, first={:?}",
+        radio.tracks.len(),
+        radio.tracks.first().map(|t| (&t.title, t.artist_line()))
+    );
     if let (Some(tok), Some(pl)) = (&radio.continuation, &radio.playlist_id) {
         let more = c.queue_more(tok, pl).await?;
         println!("radio more: {} tracks, cont={}", more.tracks.len(), more.continuation.is_some());

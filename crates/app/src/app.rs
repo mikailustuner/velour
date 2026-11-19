@@ -5,8 +5,8 @@ use crate::icon_names as icons;
 use crate::integrations::Integrations;
 use crate::lyrics::{self, LyricsResult};
 use crate::msg::{AppMsg, LibraryTab, Root, SettingChange};
-use crate::page_view::{self, Ctx, PageView};
 use crate::now_playing::NowPlaying;
+use crate::page_view::{self, Ctx, PageView};
 use crate::player_bar::PlayerBar;
 use crate::queue::{PlayQueue, RadioSource};
 use crate::settings::{Session, Settings, Theme};
@@ -15,8 +15,8 @@ use crate::widgets::icon_button;
 use crate::{eq, settings_page};
 use gtk::glib;
 use gtk::prelude::*;
-use relm4::prelude::*;
 use relm4::Sender;
+use relm4::prelude::*;
 use sonora_player::{Event, Player, Resolver};
 use sonora_ytm::{Card, Client, Cookies, Item, LikeStatus, Page, PageType, Queue, Section, Target, Track};
 use std::collections::{HashSet, VecDeque};
@@ -206,7 +206,11 @@ impl Component for App {
 
         let css = gtk::CssProvider::new();
         css.load_from_string(include_str!("style.css"));
-        gtk::style_context_add_provider_for_display(&WidgetExt::display(&window), &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        gtk::style_context_add_provider_for_display(
+            &WidgetExt::display(&window),
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
 
         // ---------- sidebar ----------
         let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -445,10 +449,10 @@ impl Component for App {
         // ---------- services ----------
         let resolver = Arc::new(Resolver::new(cookies_arg(&settings.browser)));
         // Stream URLs stay valid for hours; reuse them across restarts.
-        if let Ok(text) = std::fs::read_to_string(crate::settings::state_dir().join("streams.json")) {
-            if let Ok(entries) = serde_json::from_str(&text) {
-                resolver.import_cache(entries);
-            }
+        if let Ok(text) = std::fs::read_to_string(crate::settings::state_dir().join("streams.json"))
+            && let Ok(entries) = serde_json::from_str(&text)
+        {
+            resolver.import_cache(entries);
         }
         let player = {
             let s = input.clone();
@@ -543,7 +547,9 @@ impl Component for App {
         match msg {
             // ---------------- navigation ----------------
             AppMsg::Root(r) => self.navigate(NavKey::Root(r), true, &sender),
-            AppMsg::Open(Target::Browse { id, params, .. }) => self.navigate(NavKey::Browse { id, params }, false, &sender),
+            AppMsg::Open(Target::Browse { id, params, .. }) => {
+                self.navigate(NavKey::Browse { id, params }, false, &sender)
+            }
             AppMsg::Open(t @ Target::Watch { .. }) => self.play_target(t, &sender),
             AppMsg::SearchTyped(q) => {
                 // Text we set ourselves after a search shouldn't reopen suggestions.
@@ -575,7 +581,9 @@ impl Component for App {
                     self.connect(&sender);
                 }
                 if let Some(key) = self.nav.last().map(|e| e.key.clone()) {
-                    self.nav.pop().map(|e| self.content.remove(&e.widget));
+                    if let Some(e) = self.nav.pop() {
+                        self.content.remove(&e.widget)
+                    }
                     self.navigate(key, false, &sender);
                 }
             }
@@ -593,19 +601,34 @@ impl Component for App {
             }
             AppMsg::PlayTarget(t) => self.play_target(t, &sender),
             AppMsg::Prefetch(id) => self.prefetch(id, &sender),
-            AppMsg::Radio(id) => self.play_target(Target::Watch { video_id: Some(id.clone()), playlist_id: Some(format!("RDAMVM{id}")), params: Some("wAEB".into()) }, &sender),
+            AppMsg::Radio(id) => self.play_target(
+                Target::Watch {
+                    video_id: Some(id.clone()),
+                    playlist_id: Some(format!("RDAMVM{id}")),
+                    params: Some("wAEB".into()),
+                },
+                &sender,
+            ),
             AppMsg::PlayNext(t) => {
                 let empty = self.queue.is_empty();
                 self.queue.insert_next(t.clone());
                 self.queue_changed();
-                if empty { self.start_current(&sender) } else { self.prepare_next(&sender) }
+                if empty {
+                    self.start_current(&sender)
+                } else {
+                    self.prepare_next(&sender)
+                }
                 self.toast(&format!("“{}” plays next", t.title));
             }
             AppMsg::AddToQueue(t) => {
                 let empty = self.queue.is_empty();
                 self.queue.append([t.clone()]);
                 self.queue_changed();
-                if empty { self.start_current(&sender) } else { self.prepare_next(&sender) }
+                if empty {
+                    self.start_current(&sender)
+                } else {
+                    self.prepare_next(&sender)
+                }
                 self.toast(&format!("Added “{}” to the queue", t.title));
             }
             AppMsg::TogglePlay => {
@@ -688,12 +711,18 @@ impl Component for App {
             AppMsg::Rate(t, status) => self.rate(t.video_id.clone(), status, &sender),
             AppMsg::RateCurrent => {
                 if let Some(t) = self.queue.current() {
-                    let status = if t.like == Some(LikeStatus::Like) { LikeStatus::Indifferent } else { LikeStatus::Like };
+                    let status =
+                        if t.like == Some(LikeStatus::Like) { LikeStatus::Indifferent } else { LikeStatus::Like };
                     self.rate(t.video_id.clone(), status, &sender);
                 }
             }
             AppMsg::AddToPlaylist { playlist_id, track } => {
-                let name = self.own_playlists.iter().find(|(id, _)| *id == playlist_id).map(|(_, t)| t.clone()).unwrap_or_default();
+                let name = self
+                    .own_playlists
+                    .iter()
+                    .find(|(id, _)| *id == playlist_id)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_default();
                 self.api(&sender, false, false, move |c| async move {
                     c.add_to_playlist(&playlist_id, &[&track.video_id]).await.map(|_| format!("Added to {name}"))
                 });
@@ -701,8 +730,14 @@ impl Component for App {
             AppMsg::NewPlaylist(track) => {
                 let s = self.input.clone();
                 // Anchored on the sidebar "+" (or the search button when collapsed).
-                let anchor: gtk::Widget = if self.collapsed { self.search_button.clone().upcast() } else { self.new_playlist_button.clone().upcast() };
-                page_view::ask_text(&anchor, "New playlist", "", move |title| s.emit(AppMsg::CreatePlaylist { title, tracks: track.iter().cloned().collect() }));
+                let anchor: gtk::Widget = if self.collapsed {
+                    self.search_button.clone().upcast()
+                } else {
+                    self.new_playlist_button.clone().upcast()
+                };
+                page_view::ask_text(&anchor, "New playlist", "", move |title| {
+                    s.emit(AppMsg::CreatePlaylist { title, tracks: track.iter().cloned().collect() })
+                });
             }
             AppMsg::ClearQueue => {
                 let keep: Vec<Track> = self.queue.current().cloned().into_iter().collect();
@@ -721,7 +756,9 @@ impl Component for App {
                 }
                 let s = self.input.clone();
                 let anchor = self.panel.save_button();
-                page_view::ask_text(&anchor, "Save queue as playlist", "", move |title| s.emit(AppMsg::CreatePlaylist { title, tracks: tracks.clone() }));
+                page_view::ask_text(&anchor, "Save queue as playlist", "", move |title| {
+                    s.emit(AppMsg::CreatePlaylist { title, tracks: tracks.clone() })
+                });
             }
             AppMsg::CreatePlaylist { title, tracks } => {
                 self.api(&sender, true, false, move |c| async move {
@@ -732,11 +769,15 @@ impl Component for App {
             AppMsg::RemoveFromPlaylist { playlist_id, track } => {
                 let Some(set_id) = track.set_video_id.clone() else { return };
                 self.api(&sender, false, true, move |c| async move {
-                    c.remove_from_playlist(&playlist_id, &track.video_id, &set_id).await.map(|_| format!("Removed “{}”", track.title))
+                    c.remove_from_playlist(&playlist_id, &track.video_id, &set_id)
+                        .await
+                        .map(|_| format!("Removed “{}”", track.title))
                 });
             }
             AppMsg::RenamePlaylist { playlist_id, title } => {
-                self.api(&sender, true, true, move |c| async move { c.rename_playlist(&playlist_id, &title).await.map(|_| "Playlist renamed".to_string()) });
+                self.api(&sender, true, true, move |c| async move {
+                    c.rename_playlist(&playlist_id, &title).await.map(|_| "Playlist renamed".to_string())
+                });
             }
             AppMsg::DeletePlaylist(id) => {
                 sender.oneshot_command({
@@ -746,18 +787,32 @@ impl Component for App {
                             Some(c) => c.delete_playlist(&id).await.map_err(err),
                             None => Err("Not signed in".into()),
                         };
-                        CmdOut::Done { message: r.as_ref().ok().map(|_| "Playlist deleted".into()), error: r.err(), refresh_playlists: true, reload: false, back: true }
+                        CmdOut::Done {
+                            message: r.as_ref().ok().map(|_| "Playlist deleted".into()),
+                            error: r.err(),
+                            refresh_playlists: true,
+                            reload: false,
+                            back: true,
+                        }
                     }
                 });
             }
             AppMsg::SaveToLibrary { playlist_id, save } => {
                 self.api(&sender, true, false, move |c| async move {
-                    c.rate_playlist(&playlist_id, save).await.map(|_| if save { "Saved to library".into() } else { "Removed from library".into() })
+                    c.rate_playlist(&playlist_id, save)
+                        .await
+                        .map(|_| if save { "Saved to library".into() } else { "Removed from library".into() })
                 });
             }
             AppMsg::Download(_) if !self.settings.downloads => self.toast("Downloads are off (Settings → Storage)"),
             AppMsg::Download(tracks) => {
-                let new: Vec<Track> = tracks.into_iter().filter(|t| self.downloads.file(&t.video_id).is_none() && !self.download_queue.iter().any(|q| q.video_id == t.video_id)).collect();
+                let new: Vec<Track> = tracks
+                    .into_iter()
+                    .filter(|t| {
+                        self.downloads.file(&t.video_id).is_none()
+                            && !self.download_queue.iter().any(|q| q.video_id == t.video_id)
+                    })
+                    .collect();
                 if new.is_empty() {
                     self.toast("Already downloaded");
                     return;
@@ -840,12 +895,14 @@ impl Component for App {
                         self.account = account;
                         self.refresh_playlists(&sender);
                         // Pages opened before sign-in finished are still waiting.
-                        if let Some(e) = self.nav.last() {
-                            if e.view.is_none() || e.from_cache {
-                                let key = e.key.clone();
-                                self.nav.pop().map(|e| self.content.remove(&e.widget));
-                                self.navigate(key, false, &sender);
+                        if let Some(e) = self.nav.last()
+                            && (e.view.is_none() || e.from_cache)
+                        {
+                            let key = e.key.clone();
+                            if let Some(e) = self.nav.pop() {
+                                self.content.remove(&e.widget)
                             }
+                            self.navigate(key, false, &sender);
                         }
                     }
                     Err(e) => {
@@ -853,7 +910,13 @@ impl Component for App {
                             "Couldn’t sign in to YouTube Music: {e}\nMake sure you’re logged in to music.youtube.com in {} (Settings → Account).",
                             self.settings.browser
                         );
-                        let waiting = self.nav.last().filter(|e| e.view.is_none() && !matches!(e.key, NavKey::Root(Root::Downloads | Root::Settings))).map(|e| e.key.clone());
+                        let waiting = self
+                            .nav
+                            .last()
+                            .filter(|e| {
+                                e.view.is_none() && !matches!(e.key, NavKey::Root(Root::Downloads | Root::Settings))
+                            })
+                            .map(|e| e.key.clone());
                         match waiting {
                             Some(key) => {
                                 let w = page_view::error_view(&self.title_for(&key), &msg, &self.input);
@@ -970,7 +1033,10 @@ impl Component for App {
             CmdOut::Suggestions { query, list } => {
                 // Ignore answers for text the user already changed or already searched.
                 let searched = self.nav.last().is_some_and(|e| e.key == NavKey::Search(query.clone()));
-                if searched || self.search.text().trim() != query || !self.search.state_flags().contains(gtk::StateFlags::FOCUS_WITHIN) && !self.suggest.is_visible() {
+                if searched
+                    || self.search.text().trim() != query
+                    || !self.search.state_flags().contains(gtk::StateFlags::FOCUS_WITHIN) && !self.suggest.is_visible()
+                {
                     return;
                 }
                 while let Some(c) = self.suggest_list.first_child() {
@@ -997,7 +1063,10 @@ impl Component for App {
                 if h.yt_dlp_version.is_none() {
                     warnings.push("yt-dlp wasn’t found — songs can’t play until it’s installed.".to_string());
                 } else if h.yt_dlp_age_days.is_some_and(|d| d > 45) {
-                    warnings.push(format!("yt-dlp is {} days old. If songs fail to play, update it in Settings.", h.yt_dlp_age_days.unwrap()));
+                    warnings.push(format!(
+                        "yt-dlp is {} days old. If songs fail to play, update it in Settings.",
+                        h.yt_dlp_age_days.unwrap()
+                    ));
                 }
                 if !h.js_runtime {
                     warnings.push("No JavaScript runtime (deno) found; some songs may not play.".into());
@@ -1027,7 +1096,11 @@ impl Component for App {
                 }
                 if self.download_queue.is_empty() {
                     if self.downloaded_count > 0 {
-                        self.toast(&format!("Downloaded {} song{}", self.downloaded_count, if self.downloaded_count == 1 { "" } else { "s" }));
+                        self.toast(&format!(
+                            "Downloaded {} song{}",
+                            self.downloaded_count,
+                            if self.downloaded_count == 1 { "" } else { "s" }
+                        ));
                     }
                     self.downloaded_count = 0;
                     self.reload_if(|k| *k == NavKey::Root(Root::Downloads), &sender);
@@ -1073,7 +1146,15 @@ impl App {
         }
         let mut own = vec![];
         for item in page.sections.iter().flat_map(|s| &s.items) {
-            let Item::Card(Card { title, subtitle, target: Target::Browse { id, page_type: PageType::Playlist, .. }, .. }) = item else { continue };
+            let Item::Card(Card {
+                title,
+                subtitle,
+                target: Target::Browse { id, page_type: PageType::Playlist, .. },
+                ..
+            }) = item
+            else {
+                continue;
+            };
             if id == "VLLM" || id == "VLSE" {
                 continue;
             }
@@ -1118,7 +1199,9 @@ impl App {
             };
             match r {
                 Ok(m) => CmdOut::Done { message: Some(m), error: None, refresh_playlists, reload, back: false },
-                Err(e) => CmdOut::Done { message: None, error: Some(e), refresh_playlists: false, reload: false, back: false },
+                Err(e) => {
+                    CmdOut::Done { message: None, error: Some(e), refresh_playlists: false, reload: false, back: false }
+                }
             }
         });
     }
@@ -1167,13 +1250,23 @@ impl App {
 
         // Local pages render immediately.
         let local: Option<gtk::Widget> = match &key {
-            NavKey::Root(Root::Settings) => Some(settings_page::build(&self.settings, &self.input, &self.account, self.health.as_ref())),
+            NavKey::Root(Root::Settings) => {
+                Some(settings_page::build(&self.settings, &self.input, &self.account, self.health.as_ref()))
+            }
             _ => None,
         };
         let widget = local.clone().unwrap_or_else(|| page_view::loading_view(&title));
         self.content.add_named(&widget, Some(&seq.to_string()));
         self.content.set_visible_child(&widget);
-        self.nav.push(NavEntry { key: key.clone(), seq, widget, view: None, continuation: None, loading_more: false, from_cache: false });
+        self.nav.push(NavEntry {
+            key: key.clone(),
+            seq,
+            widget,
+            view: None,
+            continuation: None,
+            loading_more: false,
+            from_cache: false,
+        });
         self.sync_nav_ui(&key);
         if local.is_some() {
             return;
@@ -1183,8 +1276,15 @@ impl App {
             let tracks = self.downloads.tracks();
             let page = Page {
                 header: None,
-                sections: if tracks.is_empty() { vec![] } else {
-                    vec![Section { title: String::new(), layout: sonora_ytm::Layout::List, items: tracks.into_iter().map(Item::Track).collect(), more: None }]
+                sections: if tracks.is_empty() {
+                    vec![]
+                } else {
+                    vec![Section {
+                        title: String::new(),
+                        layout: sonora_ytm::Layout::List,
+                        items: tracks.into_iter().map(Item::Track).collect(),
+                        more: None,
+                    }]
                 },
                 continuation: None,
             };
@@ -1192,7 +1292,10 @@ impl App {
             return;
         }
         // Instant start: show the last saved copy, then refresh in the background.
-        if let Some(page) = page_cache_path(&key).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str::<Page>(&t).ok()) {
+        if let Some(page) = page_cache_path(&key)
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| serde_json::from_str::<Page>(&t).ok())
+        {
             self.show_page(self.nav.len() - 1, page);
             if let Some(e) = self.nav.last_mut() {
                 e.from_cache = true;
@@ -1309,7 +1412,9 @@ impl App {
         b.add_css_class("segmented");
         b.set_halign(gtk::Align::Start);
         let mut group: Option<gtk::ToggleButton> = None;
-        for (tab, label) in [(LibraryTab::Playlists, "Playlists"), (LibraryTab::Albums, "Albums"), (LibraryTab::Artists, "Artists")] {
+        for (tab, label) in
+            [(LibraryTab::Playlists, "Playlists"), (LibraryTab::Albums, "Albums"), (LibraryTab::Artists, "Artists")]
+        {
             let t = gtk::ToggleButton::with_label(label);
             t.set_active(tab == active);
             if let Some(g) = &group {
@@ -1378,10 +1483,10 @@ impl App {
             return;
         };
         // Resolve the first song while the queue is being fetched.
-        if let Some(id) = &video_id {
-            if self.source_for(id).is_none() {
-                self.resolve(id.clone(), true, sender);
-            }
+        if let Some(id) = &video_id
+            && self.source_for(id).is_none()
+        {
+            self.resolve(id.clone(), true, sender);
         }
         let Some(c) = self.ytm.clone() else {
             self.toast("Still signing in…");
@@ -1429,19 +1534,24 @@ impl App {
         });
     }
 
-    fn on_resolved(&mut self, id: String, result: Result<String, String>, for_next: bool, sender: &ComponentSender<Self>) {
+    fn on_resolved(
+        &mut self,
+        id: String,
+        result: Result<String, String>,
+        for_next: bool,
+        sender: &ComponentSender<Self>,
+    ) {
         if for_next {
             if self.resolving_next.as_deref() == Some(id.as_str()) {
                 self.resolving_next = None;
             }
-            if let (Ok(url), Some(next)) = (&result, self.queue.next()) {
-                if next.video_id == id && self.loaded_id.is_some() {
-                    if let Some(p) = &self.player {
-                        if p.set_next(url, &id).is_ok() {
-                            self.prepared_next = Some(id);
-                        }
-                    }
-                }
+            if let (Ok(url), Some(next)) = (&result, self.queue.next())
+                && next.video_id == id
+                && self.loaded_id.is_some()
+                && let Some(p) = &self.player
+                && p.set_next(url, &id).is_ok()
+            {
+                self.prepared_next = Some(id);
             }
             return;
         }
@@ -1490,15 +1600,17 @@ impl App {
             self.prepared_next = None;
             return;
         };
-        if self.prepared_next.as_deref() == Some(next.video_id.as_str()) && next.video_id != self.loaded_id.clone().unwrap_or_default() {
+        if self.prepared_next.as_deref() == Some(next.video_id.as_str())
+            && next.video_id != self.loaded_id.clone().unwrap_or_default()
+        {
             return;
         }
         match self.source_for(&next.video_id) {
             Some(src) => {
-                if let Some(p) = &self.player {
-                    if p.set_next(&src, &next.video_id).is_ok() {
-                        self.prepared_next = Some(next.video_id);
-                    }
+                if let Some(p) = &self.player
+                    && p.set_next(&src, &next.video_id).is_ok()
+                {
+                    self.prepared_next = Some(next.video_id);
                 }
             }
             None => {
@@ -1539,10 +1651,10 @@ impl App {
                 self.bar.set_loading(false);
                 self.bar.set_paused(self.paused);
                 self.integrations.playback_changed(!self.paused);
-                if let Some((rid, at)) = self.resume_at.take() {
-                    if rid == id {
-                        self.seek(at);
-                    }
+                if let Some((rid, at)) = self.resume_at.take()
+                    && rid == id
+                {
+                    self.seek(at);
                 }
                 self.prepare_next(sender);
                 self.maybe_more_radio(sender);
@@ -1586,13 +1698,13 @@ impl App {
     }
 
     fn seek(&mut self, s: f64) {
-        if let Some(p) = &self.player {
-            if self.loaded_id.is_some() {
-                let _ = p.seek(s);
-                self.position = s;
-                self.bar.set_position(s);
-                self.integrations.seeked(s);
-            }
+        if let Some(p) = &self.player
+            && self.loaded_id.is_some()
+        {
+            let _ = p.seek(s);
+            self.position = s;
+            self.bar.set_position(s);
+            self.integrations.seeked(s);
         }
     }
 
@@ -1633,7 +1745,9 @@ impl App {
         }
         let (Some(src), Some(c)) = (self.queue.radio.clone(), self.ytm.clone()) else { return };
         self.radio_loading = true;
-        sender.oneshot_command(async move { CmdOut::RadioMore(c.queue_more(&src.token, &src.playlist_id).await.map_err(err)) });
+        sender.oneshot_command(async move {
+            CmdOut::RadioMore(c.queue_more(&src.token, &src.playlist_id).await.map_err(err))
+        });
     }
 
     /// Counts a play in YouTube Music history once playback really reaches 30 s.
@@ -1715,7 +1829,8 @@ impl App {
         }
         let Some(track) = self.download_queue.pop_front() else { return };
         self.downloading = true;
-        let (yt, cookies, dir) = (self.resolver.yt_dlp().clone(), self.resolver.cookies_arg(), self.settings.download_dir.clone());
+        let (yt, cookies, dir) =
+            (self.resolver.yt_dlp().clone(), self.resolver.cookies_arg(), self.settings.download_dir.clone());
         sender.spawn_oneshot_command(move || {
             let result = downloads::download(&yt, &cookies, &dir, &track).map_err(err);
             CmdOut::Downloaded { track, result }
@@ -1742,7 +1857,8 @@ impl App {
         match self.settings.theme {
             Theme::Dark => true,
             Theme::Light => false,
-            Theme::System => gtk::Settings::default().is_some_and(|s| s.gtk_interface_color_scheme() == gtk::InterfaceColorScheme::Dark),
+            Theme::System => gtk::Settings::default()
+                .is_some_and(|s| s.gtk_interface_color_scheme() == gtk::InterfaceColorScheme::Dark),
         }
     }
 
@@ -1759,10 +1875,10 @@ impl App {
     }
 
     fn apply_eq(&self) {
-        if let Some(p) = &self.player {
-            if let Err(e) = p.set_audio_filter(&eq::filter(&self.settings.eq_preset)) {
-                eprintln!("sonora: equalizer: {e:#}");
-            }
+        if let Some(p) = &self.player
+            && let Err(e) = p.set_audio_filter(&eq::filter(&self.settings.eq_preset))
+        {
+            eprintln!("sonora: equalizer: {e:#}");
         }
     }
 
@@ -1855,10 +1971,13 @@ fn install_shortcuts(window: &gtk::ApplicationWindow, input: &Sender<AppMsg>, se
     add("<Control>Down", Box::new(|| Some(AppMsg::VolumeStep(-5.0))));
     {
         let search = search.clone();
-        add("<Control>f", Box::new(move || {
-            search.grab_focus();
-            None
-        }));
+        add(
+            "<Control>f",
+            Box::new(move || {
+                search.grab_focus();
+                None
+            }),
+        );
     }
     window.add_controller(c);
 }

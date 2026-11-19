@@ -113,12 +113,10 @@ mod tests {
     fn parses_lrc_with_metadata_and_multi_stamps() {
         let lrc = "[ar:Someone]\n[00:01.50]Hello\n[00:10.00][01:00.25]Chorus\n[00:05.00]\n";
         let l = parse_lrc(lrc);
-        assert_eq!(l, vec![
-            (1.5, "Hello".into()),
-            (5.0, "".into()),
-            (10.0, "Chorus".into()),
-            (60.25, "Chorus".into()),
-        ]);
+        assert_eq!(
+            l,
+            vec![(1.5, "Hello".into()), (5.0, "".into()), (10.0, "Chorus".into()), (60.25, "Chorus".into()),]
+        );
     }
 
     #[test]

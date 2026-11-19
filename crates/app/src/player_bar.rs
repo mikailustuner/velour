@@ -209,17 +209,22 @@ impl PlayerBar {
                     id.remove();
                 }
                 let (s, timer2, dragging) = (s.clone(), timer.clone(), dragging.clone());
-                *timer.borrow_mut() = Some(glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-                    timer2.borrow_mut().take();
-                    dragging.set(false);
-                    s.emit(AppMsg::Seek(v.max(0.0)));
-                }));
+                *timer.borrow_mut() =
+                    Some(glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
+                        timer2.borrow_mut().take();
+                        dragging.set(false);
+                        s.emit(AppMsg::Seek(v.max(0.0)));
+                    }));
                 glib::Propagation::Proceed
             });
         }
 
         let glow = gtk::CssProvider::new();
-        gtk::style_context_add_provider_for_display(&gtk::prelude::WidgetExt::display(&root), &glow, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+        gtk::style_context_add_provider_for_display(
+            &gtk::prelude::WidgetExt::display(&root),
+            &glow,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+        );
 
         Self {
             glow,
@@ -301,7 +306,8 @@ impl PlayerBar {
     }
 
     pub fn set_paused(&self, paused: bool) {
-        let (icon, label) = if paused { (icons::PLAY_ARROW_FILL_SYMBOLIC, "Play") } else { (icons::PAUSE_FILL_SYMBOLIC, "Pause") };
+        let (icon, label) =
+            if paused { (icons::PLAY_ARROW_FILL_SYMBOLIC, "Play") } else { (icons::PAUSE_FILL_SYMBOLIC, "Pause") };
         self.play.set_icon_name(icon);
         self.play.set_tooltip_text(Some(&format!("{label} (Space)")));
         self.play.update_property(&[gtk::accessible::Property::Label(label)]);
@@ -324,7 +330,11 @@ impl PlayerBar {
 
     pub fn set_volume(&self, v: f64, muted: bool) {
         self.volume.set_value(v);
-        let (icon, label) = if muted || v == 0.0 { (icons::VOLUME_OFF_SYMBOLIC, "Unmute (M)") } else { (icons::VOLUME_UP_SYMBOLIC, "Mute (M)") };
+        let (icon, label) = if muted || v == 0.0 {
+            (icons::VOLUME_OFF_SYMBOLIC, "Unmute (M)")
+        } else {
+            (icons::VOLUME_UP_SYMBOLIC, "Mute (M)")
+        };
         set_icon_button(&self.mute, icon, label);
     }
 

@@ -24,16 +24,6 @@ pub fn fmt_duration(secs: u32) -> String {
     if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn durations() {
-        assert_eq!(super::fmt_duration(0), "0:00");
-        assert_eq!(super::fmt_duration(194), "3:14");
-        assert_eq!(super::fmt_duration(3723), "1:02:03");
-    }
-}
-
 /// Small square cover: a fixed-size image clipped to rounded corners by its frame.
 pub fn small_cover(px: i32, class: &str) -> (gtk::Box, gtk::Image) {
     let img = gtk::Image::new();
@@ -45,4 +35,14 @@ pub fn small_cover(px: i32, class: &str) -> (gtk::Box, gtk::Image) {
     frame.set_halign(gtk::Align::Start);
     frame.append(&img);
     (frame, img)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn durations() {
+        assert_eq!(super::fmt_duration(0), "0:00");
+        assert_eq!(super::fmt_duration(194), "3:14");
+        assert_eq!(super::fmt_duration(3723), "1:02:03");
+    }
 }

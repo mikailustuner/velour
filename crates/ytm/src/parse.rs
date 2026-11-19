@@ -51,10 +51,10 @@ pub(crate) fn thumbnail(v: &Value) -> Option<String> {
 
 /// Rewrites googleusercontent thumbnail URLs to the requested square size.
 pub fn sized_thumbnail(url: &str, size: u32) -> String {
-    if let Some(pos) = url.rfind("=w") {
-        if url[pos..].contains("-h") {
-            return format!("{}=w{size}-h{size}-l90-rj", &url[..pos]);
-        }
+    if let Some(pos) = url.rfind("=w")
+        && url[pos..].contains("-h")
+    {
+        return format!("{}=w{size}-h{size}-l90-rj", &url[..pos]);
     }
     url.to_string()
 }
@@ -81,7 +81,11 @@ pub(crate) fn target(endpoint: &Value) -> Option<Target> {
         });
     }
     if let Some(w) = endpoint.get("watchPlaylistEndpoint") {
-        return Some(Target::Watch { video_id: None, playlist_id: str_of(&w["playlistId"]), params: str_of(&w["params"]) });
+        return Some(Target::Watch {
+            video_id: None,
+            playlist_id: str_of(&w["playlistId"]),
+            params: str_of(&w["params"]),
+        });
     }
     None
 }
@@ -94,9 +98,7 @@ const KIND_LABELS: [&str; 9] = ["Song", "Video", "Episode", "Single", "EP", "Alb
 
 fn looks_like_stat(s: &str) -> bool {
     let l = s.to_lowercase();
-    ["views", "plays", "likes", "subscribers", "monthly", "audience", "songs", "tracks"]
-        .iter()
-        .any(|w| l.contains(w))
+    ["views", "plays", "likes", "subscribers", "monthly", "audience", "songs", "tracks"].iter().any(|w| l.contains(w))
         || (s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
 }
 
@@ -156,11 +158,8 @@ fn runs_of(v: &Value) -> Vec<&Value> {
 // ---------- items ----------
 
 pub(crate) fn list_item(r: &Value) -> Option<Item> {
-    let cols: Vec<&Value> = r["flexColumns"]
-        .as_array()?
-        .iter()
-        .map(|c| &c["musicResponsiveListItemFlexColumnRenderer"]["text"])
-        .collect();
+    let cols: Vec<&Value> =
+        r["flexColumns"].as_array()?.iter().map(|c| &c["musicResponsiveListItemFlexColumnRenderer"]["text"]).collect();
     let title = text(cols.first()?);
     let title_run = &cols[0]["runs"][0];
     // Rows that open a page (album, artist, playlist) are cards even though their play
@@ -179,10 +178,10 @@ pub(crate) fn list_item(r: &Value) -> Option<Item> {
     match video_id {
         Some(video_id) => {
             let mut b = byline(&rest);
-            if let Some(fixed) = r["fixedColumns"][0]["musicResponsiveListItemFixedColumnRenderer"].get("text") {
-                if let Some(d) = parse_duration(&text(fixed)) {
-                    b.duration = Some(d);
-                }
+            if let Some(fixed) = r["fixedColumns"][0]["musicResponsiveListItemFixedColumnRenderer"].get("text")
+                && let Some(d) = parse_duration(&text(fixed))
+            {
+                b.duration = Some(d);
             }
             let mut detail = b.detail;
             if let Some(kind) = b.kind.filter(|k| k != "Song") {
@@ -205,8 +204,16 @@ pub(crate) fn list_item(r: &Value) -> Option<Item> {
         None => {
             let target = target(&r["navigationEndpoint"]).or_else(|| target(&title_run["navigationEndpoint"]))?;
             let round = matches!(&target, Target::Browse { page_type: PageType::Artist | PageType::Channel, .. });
-            let subtitle = cols.iter().skip(1).map(|c| text(c)).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" • ");
-            Some(Item::Card(Card { title, subtitle, thumbnail: thumbnail(&r["thumbnail"]), target, round, wide: false }))
+            let subtitle =
+                cols.iter().skip(1).map(|c| text(c)).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" • ");
+            Some(Item::Card(Card {
+                title,
+                subtitle,
+                thumbnail: thumbnail(&r["thumbnail"]),
+                target,
+                round,
+                wide: false,
+            }))
         }
     }
 }
@@ -346,14 +353,18 @@ fn section(sec: &Value, header: &mut Option<Header>, page_cont: &mut Option<Stri
             }
             let mut songs = items(&r["contents"]);
             // Songs under an artist card omit the artist ("Song • 3:07"); take it from the card.
-            if let Some(Section { items, .. }) = out.first() {
-                if let Some(Item::Card(Card { title, target: Target::Browse { id, page_type: PageType::Artist, .. }, .. })) = items.first() {
-                    for s in &mut songs {
-                        if let Item::Track(t) = s {
-                            if t.artists.is_empty() {
-                                t.artists.push(Link { name: title.clone(), browse_id: Some(id.clone()) });
-                            }
-                        }
+            if let Some(Section { items, .. }) = out.first()
+                && let Some(Item::Card(Card {
+                    title,
+                    target: Target::Browse { id, page_type: PageType::Artist, .. },
+                    ..
+                })) = items.first()
+            {
+                for s in &mut songs {
+                    if let Item::Track(t) = s
+                        && t.artists.is_empty()
+                    {
+                        t.artists.push(Link { name: title.clone(), browse_id: Some(id.clone()) });
                     }
                 }
             }
@@ -367,16 +378,20 @@ fn section(sec: &Value, header: &mut Option<Header>, page_cont: &mut Option<Stri
             vec![]
         }
         "musicDescriptionShelfRenderer" => {
-            if let Some(h) = header.as_mut() {
-                if h.description.is_empty() {
-                    h.description = text(&r["description"]);
-                }
+            if let Some(h) = header.as_mut()
+                && h.description.is_empty()
+            {
+                h.description = text(&r["description"]);
             }
             vec![]
         }
         "itemSectionRenderer" => {
             let items = items(&r["contents"]);
-            if items.is_empty() { vec![] } else { vec![Section { title: String::new(), layout: layout_for(&items), items, more: None }] }
+            if items.is_empty() {
+                vec![]
+            } else {
+                vec![Section { title: String::new(), layout: layout_for(&items), items, more: None }]
+            }
         }
         _ => vec![],
     }
@@ -389,7 +404,11 @@ fn responsive_header(r: &Value) -> Header {
     let mut eps = vec![];
     find_all(&r["buttons"], "watchEndpoint", &mut eps);
     if let Some(w) = eps.first() {
-        play = Some(Target::Watch { video_id: str_of(&w["videoId"]), playlist_id: str_of(&w["playlistId"]), params: None });
+        play = Some(Target::Watch {
+            video_id: str_of(&w["videoId"]),
+            playlist_id: str_of(&w["playlistId"]),
+            params: None,
+        });
     }
     Header {
         title: text(&r["title"]),
@@ -565,7 +584,12 @@ pub fn continuation(v: &Value) -> Page {
     if let Some(r) = c.get("gridContinuation") {
         return Page {
             header: None,
-            sections: vec![Section { title: String::new(), layout: Layout::Grid, items: items(&r["items"]), more: None }],
+            sections: vec![Section {
+                title: String::new(),
+                layout: Layout::Grid,
+                items: items(&r["items"]),
+                more: None,
+            }],
             continuation: continuation_token(r),
         };
     }
@@ -594,9 +618,9 @@ pub fn queue(v: &Value) -> Queue {
     let mut q = Queue::default();
     if let Some(p) = panels.first() {
         for entry in p["contents"].as_array().into_iter().flatten() {
-            let r = entry
-                .get("playlistPanelVideoRenderer")
-                .or_else(|| entry["playlistPanelVideoWrapperRenderer"]["primaryRenderer"].get("playlistPanelVideoRenderer"));
+            let r = entry.get("playlistPanelVideoRenderer").or_else(|| {
+                entry["playlistPanelVideoWrapperRenderer"]["primaryRenderer"].get("playlistPanelVideoRenderer")
+            });
             if let Some(t) = r.and_then(panel_video) {
                 q.tracks.push(t);
             }

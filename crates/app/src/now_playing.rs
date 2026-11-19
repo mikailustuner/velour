@@ -101,7 +101,9 @@ impl NowPlaying {
 
 fn link(name: &str, id: Option<&str>) -> String {
     match id {
-        Some(id) => format!("<a href=\"browse:{}\">{}</a>", glib::markup_escape_text(id), glib::markup_escape_text(name)),
+        Some(id) => {
+            format!("<a href=\"browse:{}\">{}</a>", glib::markup_escape_text(id), glib::markup_escape_text(name))
+        }
         None => glib::markup_escape_text(name).to_string(),
     }
 }

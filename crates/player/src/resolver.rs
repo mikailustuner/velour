@@ -94,7 +94,13 @@ impl Resolver {
     /// Cache entries worth persisting across restarts.
     pub fn export_cache(&self) -> Vec<(String, String, u64)> {
         let now = now_secs();
-        self.cache.lock().unwrap().iter().filter(|(_, (_, e))| *e > now + 600).map(|(k, (u, e))| (k.clone(), u.clone(), *e)).collect()
+        self.cache
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, (_, e))| *e > now + 600)
+            .map(|(k, (u, e))| (k.clone(), u.clone(), *e))
+            .collect()
     }
 
     pub fn import_cache(&self, entries: Vec<(String, String, u64)>) {
@@ -220,9 +226,16 @@ fn in_path(bin: &str) -> bool {
 /// True for yt-dlp errors that a newer yt-dlp usually fixes.
 pub fn looks_outdated(error: &str) -> bool {
     let e = error.to_lowercase();
-    ["sign in to confirm", "challenge", "needs to be reloaded", "requested format is not available", "nsig", "player response"]
-        .iter()
-        .any(|k| e.contains(k))
+    [
+        "sign in to confirm",
+        "challenge",
+        "needs to be reloaded",
+        "requested format is not available",
+        "nsig",
+        "player response",
+    ]
+    .iter()
+    .any(|k| e.contains(k))
 }
 
 fn now_secs() -> u64 {

@@ -65,7 +65,15 @@ impl Cookies {
         }
         let file = dir.join("cookies.txt");
         let run = std::process::Command::new(yt_dlp)
-            .args(["-q", "--no-warnings", "--skip-download", "--ignore-errors", "--cookies-from-browser", browser, "--cookies"])
+            .args([
+                "-q",
+                "--no-warnings",
+                "--skip-download",
+                "--ignore-errors",
+                "--cookies-from-browser",
+                browser,
+                "--cookies",
+            ])
             .arg(&file)
             // Any URL works: yt-dlp writes the cookie jar on exit. This one never resolves.
             .arg("https://cookies.invalid/")
@@ -91,7 +99,8 @@ impl Cookies {
                 continue;
             }
             let (domain, name, value) = (f[0], f[5], f[6]);
-            let ok_domain = matches!(domain, ".youtube.com" | "youtube.com" | "music.youtube.com" | ".music.youtube.com");
+            let ok_domain =
+                matches!(domain, ".youtube.com" | "youtube.com" | "music.youtube.com" | ".music.youtube.com");
             if ok_domain && !pairs.iter().any(|(n, _)| n == name) {
                 pairs.push((name.to_string(), value.to_string()));
             }
@@ -106,7 +115,12 @@ impl Cookies {
             .map(|(_, v)| v.clone())
             .context("not signed in: log in to music.youtube.com in your browser first")?;
         // ST-* are short-lived page-state cookies; sending them all blows past header limits (413).
-        let header = pairs.iter().filter(|(n, _)| !n.starts_with("ST-")).map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; ");
+        let header = pairs
+            .iter()
+            .filter(|(n, _)| !n.starts_with("ST-"))
+            .map(|(n, v)| format!("{n}={v}"))
+            .collect::<Vec<_>>()
+            .join("; ");
         Ok(Self { header, sapisid })
     }
 

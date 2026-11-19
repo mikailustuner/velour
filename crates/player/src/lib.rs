@@ -12,13 +12,17 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     /// A new entry started; `id` is what was passed to `play`/`set_next`.
-    Started { id: String },
+    Started {
+        id: String,
+    },
     Position(f64),
     Duration(f64),
     Paused(bool),
     Volume(f64),
     /// Current entry finished. `eof` is false when stopped/replaced.
-    Ended { eof: bool },
+    Ended {
+        eof: bool,
+    },
     /// Nothing left to play.
     Idle,
     Error(String),

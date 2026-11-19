@@ -78,7 +78,12 @@ impl Client {
     }
 
     /// Queue for playing `video_id` and/or `playlist_id` (radio when the id starts with `RD`).
-    pub async fn queue(&self, video_id: Option<&str>, playlist_id: Option<&str>, params: Option<&str>) -> Result<Queue> {
+    pub async fn queue(
+        &self,
+        video_id: Option<&str>,
+        playlist_id: Option<&str>,
+        params: Option<&str>,
+    ) -> Result<Queue> {
         let mut body = json!({ "isAudioOnly": true, "enablePersistentPlaylistPanel": true, "tunerSettingValue": "AUTOMIX_SETTING_NORMAL" });
         if let Some(v) = video_id {
             body["videoId"] = json!(v);
@@ -99,7 +104,9 @@ impl Client {
     /// Endless radio: more tracks for a queue that has a continuation.
     pub async fn queue_more(&self, token: &str, playlist_id: &str) -> Result<Queue> {
         let q = format!("next?ctoken={token}&continuation={token}&type=next");
-        let v = self.call(&q, json!({ "playlistId": playlist_id, "isAudioOnly": true, "enablePersistentPlaylistPanel": true })).await?;
+        let v = self
+            .call(&q, json!({ "playlistId": playlist_id, "isAudioOnly": true, "enablePersistentPlaylistPanel": true }))
+            .await?;
         Ok(parse::queue(&v))
     }
 
@@ -138,26 +145,36 @@ impl Client {
             .iter()
             .map(|v| json!({ "action": "ACTION_ADD_VIDEO", "addedVideoId": v, "dedupeOption": "DEDUPE_OPTION_SKIP" }))
             .collect();
-        let v = self.call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions })).await?;
+        let v = self
+            .call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions }))
+            .await?;
         check_status(&v)
     }
 
     pub async fn remove_from_playlist(&self, playlist_id: &str, video_id: &str, set_video_id: &str) -> Result<()> {
-        let actions = json!([{ "action": "ACTION_REMOVE_VIDEO", "removedVideoId": video_id, "setVideoId": set_video_id }]);
-        let v = self.call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions })).await?;
+        let actions =
+            json!([{ "action": "ACTION_REMOVE_VIDEO", "removedVideoId": video_id, "setVideoId": set_video_id }]);
+        let v = self
+            .call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions }))
+            .await?;
         check_status(&v)
     }
 
     pub async fn rename_playlist(&self, playlist_id: &str, title: &str) -> Result<()> {
         let actions = json!([{ "action": "ACTION_SET_PLAYLIST_NAME", "playlistName": title }]);
-        let v = self.call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions })).await?;
+        let v = self
+            .call("browse/edit_playlist", json!({ "playlistId": strip_vl(playlist_id), "actions": actions }))
+            .await?;
         check_status(&v)
     }
 
     /// Creates a private playlist and returns its id.
     pub async fn create_playlist(&self, title: &str, video_ids: &[&str]) -> Result<String> {
         let v = self
-            .call("playlist/create", json!({ "title": title, "description": "", "privacyStatus": "PRIVATE", "videoIds": video_ids }))
+            .call(
+                "playlist/create",
+                json!({ "title": title, "description": "", "privacyStatus": "PRIVATE", "videoIds": video_ids }),
+            )
             .await?;
         v["playlistId"].as_str().map(str::to_string).context("playlist/create returned no id")
     }
@@ -170,9 +187,8 @@ impl Client {
     /// Records a play in the account's YouTube Music history (feeds recommendations).
     pub async fn add_history(&self, video_id: &str) -> Result<()> {
         let v = self.call("player", json!({ "videoId": video_id })).await?;
-        let url = v["playbackTracking"]["videostatsPlaybackUrl"]["baseUrl"]
-            .as_str()
-            .context("no playback tracking url")?;
+        let url =
+            v["playbackTracking"]["videostatsPlaybackUrl"]["baseUrl"].as_str().context("no playback tracking url")?;
         const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
         // Keep the thread-local RNG out of the await points (the future must be Send).
         let cpn: String = {

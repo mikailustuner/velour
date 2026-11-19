@@ -79,7 +79,9 @@ impl PageView {
         if page.sections.is_empty() {
             view.content.append(&empty_state(icons::MUSIC_NOTE_SYMBOLIC, "Nothing here yet."));
         }
-        let numbered = page.header.as_ref().is_some_and(|h| matches!(&h.play, Some(Target::Watch { playlist_id: Some(p), .. }) if p.starts_with("OLAK")));
+        let numbered = page.header.as_ref().is_some_and(
+            |h| matches!(&h.play, Some(Target::Watch { playlist_id: Some(p), .. }) if p.starts_with("OLAK")),
+        );
         for s in &page.sections {
             view.add_section(s, numbered);
         }
@@ -93,11 +95,7 @@ impl PageView {
         }
         match s.layout {
             Layout::List => {
-                let tl = TrackList {
-                    list: gtk::ListBox::new(),
-                    tracks: Rc::new(RefCell::new(vec![])),
-                    numbered,
-                };
+                let tl = TrackList { list: gtk::ListBox::new(), tracks: Rc::new(RefCell::new(vec![])), numbered };
                 tl.list.add_css_class("tracks");
                 tl.list.set_selection_mode(gtk::SelectionMode::None);
                 tl.list.set_activate_on_single_click(false);
@@ -111,15 +109,14 @@ impl PageView {
                         let mut start = 0;
                         let mut child = list.first_child();
                         while let Some(w) = child {
-                            if let Ok(r) = w.clone().downcast::<gtk::ListBoxRow>() {
-                                if r.is_child_visible() {
-                                    if let Some(t) = row_index(&r).and_then(|i| all.get(i)) {
-                                        if r == *row {
-                                            start = visible.len();
-                                        }
-                                        visible.push(t.clone());
-                                    }
+                            if let Ok(r) = w.clone().downcast::<gtk::ListBoxRow>()
+                                && r.is_child_visible()
+                                && let Some(t) = row_index(&r).and_then(|i| all.get(i))
+                            {
+                                if r == *row {
+                                    start = visible.len();
                                 }
+                                visible.push(t.clone());
                             }
                             child = w.next_sibling();
                         }
@@ -214,10 +211,13 @@ fn prefetch_on_hover(w: &impl IsA<gtk::Widget>, id: Option<String>, sender: &Sen
         let (timer, sender) = (timer.clone(), sender.clone());
         motion.connect_enter(move |_, _, _| {
             let (id, sender, t2) = (id.clone(), sender.clone(), timer.clone());
-            if let Some(old) = timer.borrow_mut().replace(glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
-                t2.borrow_mut().take();
-                sender.emit(AppMsg::Prefetch(id));
-            })) {
+            if let Some(old) = timer.borrow_mut().replace(glib::timeout_add_local_once(
+                std::time::Duration::from_millis(500),
+                move || {
+                    t2.borrow_mut().take();
+                    sender.emit(AppMsg::Prefetch(id));
+                },
+            )) {
                 old.remove();
             }
         });
@@ -252,15 +252,6 @@ pub fn fold(s: &str) -> String {
         .collect()
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn folding() {
-        assert_eq!(super::fold("Şarkı İstanbul Gönül"), "sarki istanbul gonul");
-        assert_eq!(super::fold("ÇAĞRI"), "cagri");
-    }
-}
-
 fn row_index(r: &gtk::ListBoxRow) -> Option<usize> {
     r.widget_name().parse().ok()
 }
@@ -289,7 +280,12 @@ fn list_tools(tl: &TrackList) -> gtk::Box {
             }
             let all = tracks.borrow();
             let Some(t) = row_index(row).and_then(|i| all.get(i)) else { return true };
-            let hay = fold(&format!("{} {} {}", t.title, t.artist_line(), t.album.as_ref().map(|a| a.name.as_str()).unwrap_or("")));
+            let hay = fold(&format!(
+                "{} {} {}",
+                t.title,
+                t.artist_line(),
+                t.album.as_ref().map(|a| a.name.as_str()).unwrap_or("")
+            ));
             q.split_whitespace().all(|w| hay.contains(w))
         });
     }
@@ -526,17 +522,21 @@ fn header(h: &Header, tracks: &[Track], ctx: &Ctx) -> gtk::Box {
     if let Some(pl) = &h.playlist_id {
         let rename = icon_button(icons::EDIT_SYMBOLIC, "Rename playlist");
         let (s, id, title) = (sender.clone(), pl.clone(), h.title.clone());
-        rename.connect_clicked(move |b| ask_text(b, "Rename playlist", &title, {
-            let (s, id) = (s.clone(), id.clone());
-            move |t| s.emit(AppMsg::RenamePlaylist { playlist_id: id.clone(), title: t })
-        }));
+        rename.connect_clicked(move |b| {
+            ask_text(b, "Rename playlist", &title, {
+                let (s, id) = (s.clone(), id.clone());
+                move |t| s.emit(AppMsg::RenamePlaylist { playlist_id: id.clone(), title: t })
+            })
+        });
         buttons.append(&rename);
         let del = icon_button(icons::DELETE_SYMBOLIC, "Delete playlist");
         let (s, id) = (sender.clone(), pl.clone());
-        del.connect_clicked(move |b| confirm(b, "Delete this playlist?", "Delete", {
-            let (s, id) = (s.clone(), id.clone());
-            move || s.emit(AppMsg::DeletePlaylist(id.clone()))
-        }));
+        del.connect_clicked(move |b| {
+            confirm(b, "Delete this playlist?", "Delete", {
+                let (s, id) = (s.clone(), id.clone());
+                move || s.emit(AppMsg::DeletePlaylist(id.clone()))
+            })
+        });
         buttons.append(&del);
     } else if let (false, Some(Target::Watch { playlist_id: Some(pl), .. })) = (h.round, &h.play) {
         // Albums and other people's playlists can be saved to the library (not artists).
@@ -624,7 +624,9 @@ fn tile(item: &Item, section_tracks: &[Track], ctx: &Ctx) -> gtk::Widget {
             v.set_width_request(160);
             let start = section_tracks.iter().position(|x| x.video_id == t.video_id).unwrap_or(0);
             let tracks = section_tracks.to_vec();
-            b.connect_clicked(move |_| sender.emit(AppMsg::PlayTracks { tracks: tracks.clone(), start, shuffle: false }));
+            b.connect_clicked(move |_| {
+                sender.emit(AppMsg::PlayTracks { tracks: tracks.clone(), start, shuffle: false })
+            });
             (t.title.clone(), t.artist_line())
         }
     };
@@ -652,7 +654,9 @@ fn tile(item: &Item, section_tracks: &[Track], ctx: &Ctx) -> gtk::Widget {
 /// Artist and album names as clickable links.
 fn byline_markup(t: &Track, with_album: bool) -> String {
     let link = |name: &str, id: &Option<String>| match id {
-        Some(id) => format!("<a href=\"browse:{}\">{}</a>", glib::markup_escape_text(id), glib::markup_escape_text(name)),
+        Some(id) => {
+            format!("<a href=\"browse:{}\">{}</a>", glib::markup_escape_text(id), glib::markup_escape_text(name))
+        }
         None => glib::markup_escape_text(name).to_string(),
     };
     let mut parts: Vec<String> = vec![];
@@ -660,10 +664,8 @@ fn byline_markup(t: &Track, with_album: bool) -> String {
     if !artists.is_empty() {
         parts.push(artists.join(", "));
     }
-    if with_album {
-        if let Some(a) = &t.album {
-            parts.push(link(&a.name, &a.browse_id));
-        }
+    if with_album && let Some(a) = &t.album {
+        parts.push(link(&a.name, &a.browse_id));
     }
     if let Some(d) = &t.detail {
         parts.push(glib::markup_escape_text(d).to_string());
@@ -723,17 +725,17 @@ fn track_row(t: &Track, index: usize, numbered: bool, ctx: &Ctx) -> gtk::ListBox
     }
     b.append(&text);
 
-    if let Some(a) = &t.album {
-        if !numbered {
-            let markup = byline_markup(&Track { artists: vec![], detail: None, ..t.clone() }, true);
-            let l = link_label(&markup, &ctx.sender);
-            l.add_css_class("dim");
-            l.add_css_class("album-col");
-            l.set_width_chars(24);
-            l.set_max_width_chars(24);
-            l.set_tooltip_text(Some(&a.name));
-            b.append(&l);
-        }
+    if let Some(a) = &t.album
+        && !numbered
+    {
+        let markup = byline_markup(&Track { artists: vec![], detail: None, ..t.clone() }, true);
+        let l = link_label(&markup, &ctx.sender);
+        l.add_css_class("dim");
+        l.add_css_class("album-col");
+        l.set_width_chars(24);
+        l.set_max_width_chars(24);
+        l.set_tooltip_text(Some(&a.name));
+        b.append(&l);
     }
 
     if ctx.downloaded.contains(&t.video_id) {
@@ -744,7 +746,10 @@ fn track_row(t: &Track, index: usize, numbered: bool, ctx: &Ctx) -> gtk::ListBox
     }
 
     let liked = t.like == Some(LikeStatus::Like);
-    let like = icon_button(if liked { icons::FAVORITE_FILL_SYMBOLIC } else { icons::FAVORITE_SYMBOLIC }, if liked { "Remove from Liked" } else { "Like" });
+    let like = icon_button(
+        if liked { icons::FAVORITE_FILL_SYMBOLIC } else { icons::FAVORITE_SYMBOLIC },
+        if liked { "Remove from Liked" } else { "Like" },
+    );
     like.add_css_class(if liked { "liked" } else { "hover-only" });
     {
         let (s, track) = (ctx.sender.clone(), t.clone());
@@ -847,10 +852,22 @@ pub fn track_menu(t: &Track, ctx: &Ctx) -> gtk::Popover {
     }
     if let Some(a) = t.artists.iter().find(|a| a.browse_id.is_some()) {
         let id = a.browse_id.clone().unwrap();
-        add(&main, "Go to artist", icons::PERSON_SYMBOLIC, Box::new(move || AppMsg::Open(Target::Browse { id: id.clone(), params: None, page_type: PageType::Artist })));
+        add(
+            &main,
+            "Go to artist",
+            icons::PERSON_SYMBOLIC,
+            Box::new(move || {
+                AppMsg::Open(Target::Browse { id: id.clone(), params: None, page_type: PageType::Artist })
+            }),
+        );
     }
     if let Some(id) = t.album.as_ref().and_then(|a| a.browse_id.clone()) {
-        add(&main, "Go to album", icons::ALBUM_SYMBOLIC, Box::new(move || AppMsg::Open(Target::Browse { id: id.clone(), params: None, page_type: PageType::Album })));
+        add(
+            &main,
+            "Go to album",
+            icons::ALBUM_SYMBOLIC,
+            Box::new(move || AppMsg::Open(Target::Browse { id: id.clone(), params: None, page_type: PageType::Album })),
+        );
     }
 
     // "Add to playlist" opens the second page.
@@ -867,7 +884,12 @@ pub fn track_menu(t: &Track, ctx: &Ctx) -> gtk::Popover {
     let list_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     for (id, title) in ctx.own_playlists.iter() {
         let (tr, id) = (t.clone(), id.clone());
-        add(&list_box, title, icons::LIBRARY_MUSIC_SYMBOLIC, Box::new(move || AppMsg::AddToPlaylist { playlist_id: id.clone(), track: tr.clone() }));
+        add(
+            &list_box,
+            title,
+            icons::LIBRARY_MUSIC_SYMBOLIC,
+            Box::new(move || AppMsg::AddToPlaylist { playlist_id: id.clone(), track: tr.clone() }),
+        );
     }
     let scroll = gtk::ScrolledWindow::new();
     scroll.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
@@ -884,7 +906,12 @@ pub fn track_menu(t: &Track, ctx: &Ctx) -> gtk::Popover {
     }
     if let (Some(pl), Some(_)) = (&ctx.editable_playlist, &t.set_video_id) {
         let (pl, tr) = (pl.clone(), t.clone());
-        add(&main, "Remove from this playlist", icons::DELETE_SYMBOLIC, Box::new(move || AppMsg::RemoveFromPlaylist { playlist_id: pl.clone(), track: tr.clone() }));
+        add(
+            &main,
+            "Remove from this playlist",
+            icons::DELETE_SYMBOLIC,
+            Box::new(move || AppMsg::RemoveFromPlaylist { playlist_id: pl.clone(), track: tr.clone() }),
+        );
     }
     main.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
     let liked = t.like == Some(LikeStatus::Like);
@@ -981,4 +1008,13 @@ pub fn confirm(anchor: &impl IsA<gtk::Widget>, question: &str, action: &str, on_
         glib::idle_add_local_once(move || p.unparent());
     });
     pop.popup();
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn folding() {
+        assert_eq!(super::fold("Şarkı İstanbul Gönül"), "sarki istanbul gonul");
+        assert_eq!(super::fold("ÇAĞRI"), "cagri");
+    }
 }

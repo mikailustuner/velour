@@ -192,7 +192,8 @@ impl PlayQueue {
         } else if let Some(orig) = self.unshuffled.take() {
             let current = self.current().map(|t| t.video_id.clone());
             // Keep tracks added while shuffled.
-            let mut restored: Vec<Track> = orig.into_iter().filter(|t| self.tracks.iter().any(|x| x.video_id == t.video_id)).collect();
+            let mut restored: Vec<Track> =
+                orig.into_iter().filter(|t| self.tracks.iter().any(|x| x.video_id == t.video_id)).collect();
             for t in &self.tracks {
                 if !restored.iter().any(|x| x.video_id == t.video_id) {
                     restored.push(t.clone());
@@ -215,10 +216,10 @@ impl PlayQueue {
     }
 
     fn skip_unplayable_forward(&mut self) {
-        if self.current().is_some_and(|t| !t.playable) {
-            if let Some(i) = (self.pos..self.tracks.len()).find(|&i| self.tracks[i].playable) {
-                self.pos = i;
-            }
+        if self.current().is_some_and(|t| !t.playable)
+            && let Some(i) = (self.pos..self.tracks.len()).find(|&i| self.tracks[i].playable)
+        {
+            self.pos = i;
         }
     }
 }

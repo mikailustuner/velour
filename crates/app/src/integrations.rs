@@ -147,7 +147,9 @@ impl Integrations {
             if let Some(m) = meta {
                 let _ = player.set_metadata(m).await;
             }
-            let _ = player.set_playback_status(if playing { PlaybackStatus::Playing } else { PlaybackStatus::Paused }).await;
+            let _ = player
+                .set_playback_status(if playing { PlaybackStatus::Playing } else { PlaybackStatus::Paused })
+                .await;
             let _ = player.set_shuffle(shuffle).await;
             if let Some(l) = loop_status {
                 let _ = player.set_loop_status(l).await;
@@ -174,16 +176,16 @@ impl Integrations {
     pub fn track_changed(&mut self, track: Option<&Track>) {
         self.current = track.cloned();
         self.started_at = glib::real_time() / 1_000_000;
-        let meta = track.map(metadata).unwrap_or_else(Metadata::new);
+        let meta = track.map(metadata).unwrap_or_default();
         self.mpris_state.borrow_mut().meta = Some(meta.clone());
         self.with_mpris(move |p| async move {
             p.set_position(Time::ZERO);
             p.set_metadata(meta).await
         });
-        if let Some(t) = track {
-            if self.notifications {
-                self.notify(t);
-            }
+        if let Some(t) = track
+            && self.notifications
+        {
+            self.notify(t);
         }
         self.update_tray();
         self.update_discord();
@@ -319,7 +321,11 @@ impl Integrations {
     fn tray_state(&self) -> Tray {
         Tray {
             sender: self.sender.clone(),
-            title: self.current.as_ref().map(|t| format!("{} — {}", t.title, t.artist_line())).unwrap_or_else(|| "Sonora".into()),
+            title: self
+                .current
+                .as_ref()
+                .map(|t| format!("{} — {}", t.title, t.artist_line()))
+                .unwrap_or_else(|| "Sonora".into()),
             playing: self.playing,
         }
     }
@@ -428,7 +434,12 @@ impl ksni::Tray for Tray {
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::StandardItem;
         let item = |label: &str, msg: fn() -> AppMsg| -> ksni::MenuItem<Self> {
-            StandardItem { label: label.into(), activate: Box::new(move |t: &mut Self| t.sender.emit(msg())), ..Default::default() }.into()
+            StandardItem {
+                label: label.into(),
+                activate: Box::new(move |t: &mut Self| t.sender.emit(msg())),
+                ..Default::default()
+            }
+            .into()
         };
         vec![
             item(if self.playing { "Pause" } else { "Play" }, || AppMsg::TogglePlay),

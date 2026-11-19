@@ -12,7 +12,7 @@ GTK4 + relm4 window, sidebar, page stack, now-playing bar, theme CSS, dark/light
 
 ## Phase 2 — browse ✅ (2026-11-19)
 Generic `Page` model + tolerant parsers (home, explore, library, liked, history, playlist,
-album, artist, search, queue, lyrics), continuations, cover cache (disk + 300-entry LRU,
+album, artist, search, queue, lyrics), continuations, cover cache (disk + 200-entry LRU,
 off-thread decode/downscale). 12 parser tests on real responses.
 Verified by screenshots: Home, Explore, Library tabs, playlist, artist, search.
 

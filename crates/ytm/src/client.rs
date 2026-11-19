@@ -45,13 +45,8 @@ impl Client {
         if let Some(c) = &cookies {
             req = req.header("Cookie", c.header());
         }
-        let page = req
-            .send()
-            .await
-            .context("can't reach music.youtube.com (offline?)")?
-            .error_for_status()?
-            .text()
-            .await?;
+        let page =
+            req.send().await.context("can't reach music.youtube.com (offline?)")?.error_for_status()?.text().await?;
         let client_version = extract(&page, "\"INNERTUBE_CLIENT_VERSION\":\"")
             .context("client version not found on music.youtube.com")?;
         Ok(Self { http, cookies, client_version })
@@ -90,7 +85,10 @@ impl Client {
             "client": { "clientName": "WEB_REMIX", "clientVersion": self.client_version, "hl": "en", "gl": "TR" },
             "user": {}
         });
-        let url = format!("{ORIGIN}/youtubei/v1/{endpoint}{}prettyPrint=false", if endpoint.contains('?') { '&' } else { '?' });
+        let url = format!(
+            "{ORIGIN}/youtubei/v1/{endpoint}{}prettyPrint=false",
+            if endpoint.contains('?') { '&' } else { '?' }
+        );
         let mut req = self.http.post(url).header("Origin", ORIGIN).header("X-Origin", ORIGIN).json(&body);
         if let Some(c) = &self.cookies {
             req = req

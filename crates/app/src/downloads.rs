@@ -26,7 +26,8 @@ impl Index {
 
     /// Loads the index and drops entries whose files were deleted outside the app.
     pub fn load() -> Self {
-        let mut idx: Self = std::fs::read_to_string(Self::path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let mut idx: Self =
+            std::fs::read_to_string(Self::path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         idx.entries.retain(|_, e| e.path.exists());
         idx
     }
@@ -44,10 +45,10 @@ impl Index {
     }
 
     pub fn remove(&mut self, video_id: &str) -> Result<()> {
-        if let Some(e) = self.entries.remove(video_id) {
-            if e.path.exists() {
-                std::fs::remove_file(&e.path).with_context(|| format!("deleting {}", e.path.display()))?;
-            }
+        if let Some(e) = self.entries.remove(video_id)
+            && e.path.exists()
+        {
+            std::fs::remove_file(&e.path).with_context(|| format!("deleting {}", e.path.display()))?;
         }
         self.save();
         Ok(())
@@ -55,7 +56,10 @@ impl Index {
 }
 
 fn safe_name(s: &str) -> String {
-    let cleaned: String = s.chars().map(|c| if matches!(c, '/' | '\\' | '\0' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c }).collect();
+    let cleaned: String = s
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | '\0' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c })
+        .collect();
     cleaned.trim().trim_matches('.').chars().take(120).collect()
 }
 
@@ -69,7 +73,14 @@ pub fn download(yt_dlp: &Path, cookies_arg: &str, dir: &Path, track: &Track) -> 
         .args(["-n", "15"])
         .arg(yt_dlp)
         .args(["-q", "--no-warnings", "--no-playlist", "-f", "774/251/bestaudio", "-x", "--audio-format", "opus"])
-        .args(["--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg", "--cookies-from-browser", cookies_arg])
+        .args([
+            "--embed-metadata",
+            "--embed-thumbnail",
+            "--convert-thumbnails",
+            "jpg",
+            "--cookies-from-browser",
+            cookies_arg,
+        ])
         .arg("-o")
         .arg(&template)
         .arg("--print")
@@ -79,7 +90,10 @@ pub fn download(yt_dlp: &Path, cookies_arg: &str, dir: &Path, track: &Track) -> 
         .context("starting yt-dlp")?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        bail!("{}", err.lines().rfind(|l| l.contains("ERROR")).unwrap_or("download failed").trim_start_matches("ERROR: "));
+        bail!(
+            "{}",
+            err.lines().rfind(|l| l.contains("ERROR")).unwrap_or("download failed").trim_start_matches("ERROR: ")
+        );
     }
     let path = PathBuf::from(String::from_utf8_lossy(&out.stdout).lines().last().unwrap_or("").trim());
     if !path.exists() {

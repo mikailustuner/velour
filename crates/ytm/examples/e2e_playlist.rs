@@ -22,7 +22,11 @@ async fn main() -> anyhow::Result<()> {
     deleted?;
     tokio::time::sleep(Duration::from_secs(2)).await;
     let lib = c.library_playlists().await?;
-    let still_there = lib.sections.iter().flat_map(|s| &s.items).any(|i| matches!(i, Item::Card(Card { target: Target::Browse { id: b, .. }, .. }) if b.ends_with(&id)));
+    let still_there = lib
+        .sections
+        .iter()
+        .flat_map(|s| &s.items)
+        .any(|i| matches!(i, Item::Card(Card { target: Target::Browse { id: b, .. }, .. }) if b.ends_with(&id)));
     ensure!(!still_there, "playlist still in library after delete");
     println!("OK: create, add, remove, rename, delete");
     Ok(())
