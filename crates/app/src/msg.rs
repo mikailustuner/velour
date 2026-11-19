@@ -106,6 +106,9 @@ pub enum AppMsg {
     TrayReady(crate::integrations::TrayHandle),
     CloseRequested,
     Quit,
+
+    // ---- local control socket ----
+    Remote(crate::remote::Op, crate::remote::Reply),
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +125,7 @@ pub enum SettingChange {
     Browser(String),
     Downloads(bool),
     SidebarPlaylists(bool),
+    RemoteControl(bool),
     ClearCache,
     UpdateYtDlp,
 }

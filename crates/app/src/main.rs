@@ -9,6 +9,7 @@ mod now_playing;
 mod page_view;
 mod player_bar;
 mod queue;
+mod remote;
 mod settings;
 mod settings_page;
 mod side_panel;

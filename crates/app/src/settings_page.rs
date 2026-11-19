@@ -98,6 +98,16 @@ pub fn build(
     switch(&g, "Tray icon", Some("Needs a bar with a tray (e.g. waybar)."), s.tray, sender, SettingChange::Tray);
     switch(
         &g,
+        "Remote control",
+        Some(
+            "Lets apps on this computer (e.g. a phone remote) control playback and browse your library through a private local socket.",
+        ),
+        s.remote_control,
+        sender,
+        SettingChange::RemoteControl,
+    );
+    switch(
+        &g,
         "Discord status",
         Some("Shows the current song on your Discord profile."),
         s.discord,

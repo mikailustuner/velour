@@ -58,6 +58,8 @@ pub struct Settings {
     pub browser: String,
     /// Software rendering: ~160 MB less memory but far more CPU while scrolling.
     pub low_memory: bool,
+    /// Local control socket for other apps (e.g. a phone remote); off by default.
+    pub remote_control: bool,
 }
 
 impl Default for Settings {
@@ -80,6 +82,7 @@ impl Default for Settings {
             browser: "firefox".into(),
             downloads: false,
             sidebar_playlists: true,
+            remote_control: false,
         }
     }
 }

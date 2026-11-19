@@ -24,7 +24,8 @@ already sees, and audio through libmpv.
 - **Your library** — like/unlike, add/remove songs, create/rename/delete playlists, save albums,
   save the queue as a playlist; filter and sort long playlists
 - **Desktop** — MPRIS (media keys, `playerctl`), keeps playing when closed, single instance,
-  optional notifications, tray icon and Discord status, equalizer presets
+  optional notifications, tray icon and Discord status, equalizer presets, an optional local
+  [remote-control socket](docs/remote-control.md) (e.g. for a phone remote)
 - **Fast** — cached pages open instantly, songs are prepared when you hover them and the next song
   is resolved ahead of time
 - Sign in with **Firefox, Chrome, Chromium, Brave, Edge, Vivaldi or Opera**
@@ -142,6 +143,7 @@ runs yt-dlp at low priority (~4 s); hovering a song or the Play button prepares 
 No accounts, servers, analytics or telemetry. Velour reads your browser's YouTube cookies locally
 and sends them only to YouTube. Lyrics lookups send the song title, artist, album and duration to
 LRCLIB. Plays are added to your YouTube Music history after 30 seconds (can be turned off).
+The remote-control socket is off by default and reachable only by your own user on this computer.
 Details: [SECURITY.md](SECURITY.md).
 
 ## Legal

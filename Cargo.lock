@@ -2796,6 +2796,7 @@ dependencies = [
  "hex",
  "image",
  "ksni",
+ "libc",
  "mpris-server",
  "rand 0.9.5",
  "relm4",

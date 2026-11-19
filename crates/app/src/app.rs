@@ -9,6 +9,7 @@ use crate::now_playing::NowPlaying;
 use crate::page_view::{self, Ctx, PageView};
 use crate::player_bar::PlayerBar;
 use crate::queue::{PlayQueue, RadioSource};
+use crate::remote::{self, LibraryTab as RemoteTab, Op, Reply, WTrack};
 use crate::settings::{Session, Settings, Theme};
 use crate::side_panel::{Panel, SidePanel};
 use crate::widgets::icon_button;
@@ -17,6 +18,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use relm4::Sender;
 use relm4::prelude::*;
+use serde_json::{Value, json};
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -60,19 +62,49 @@ fn page_cache_path(key: &NavKey) -> Option<PathBuf> {
 #[derive(Debug)]
 pub enum CmdOut {
     Connected(Result<(Arc<Client>, String), String>),
-    Page { seq: u64, result: Result<Page, String> },
-    More { seq: u64, result: Result<Page, String> },
-    Resolved { id: String, result: Result<String, String>, for_next: bool },
-    QueueFetched { result: Result<Queue, String>, start_id: Option<String> },
+    Page {
+        seq: u64,
+        result: Result<Page, String>,
+    },
+    More {
+        seq: u64,
+        result: Result<Page, String>,
+    },
+    Resolved {
+        id: String,
+        result: Result<String, String>,
+        for_next: bool,
+    },
+    QueueFetched {
+        result: Result<Queue, String>,
+        start_id: Option<String>,
+    },
     RadioMore(Result<Queue, String>),
     Playlists(Result<Page, String>),
-    Lyrics { id: String, result: LyricsResult },
-    Done { message: Option<String>, error: Option<String>, refresh_playlists: bool, reload: bool, back: bool },
-    Downloaded { track: Track, result: Result<PathBuf, String> },
+    Lyrics {
+        id: String,
+        result: LyricsResult,
+    },
+    Done {
+        message: Option<String>,
+        error: Option<String>,
+        refresh_playlists: bool,
+        reload: bool,
+        back: bool,
+    },
+    Downloaded {
+        track: Track,
+        result: Result<PathBuf, String>,
+    },
     Prefetched,
     Health(velour_player::Health),
-    Suggestions { query: String, list: Vec<String> },
+    Suggestions {
+        query: String,
+        list: Vec<String>,
+    },
     YtDlpUpdated(Result<String, String>),
+    /// A remote request was answered from a background task.
+    RemoteDone,
 }
 
 pub struct App {
@@ -141,6 +173,13 @@ pub struct App {
     integrations: Integrations,
     collapsed: bool,
     last_width: i32,
+
+    // ---------- remote control ----------
+    remote: Option<remote::Server>,
+    /// Seconds, from mpv (falls back to the track's listed length).
+    duration: f64,
+    /// Lyrics of the last song they were loaded for (answers remote requests without refetching).
+    last_lyrics: Option<(String, LyricsResult)>,
 }
 
 const NAV_ROOTS: [(Root, &str, &str); 6] = [
@@ -526,6 +565,9 @@ impl Component for App {
             integrations: Integrations::new(&input),
             collapsed: false,
             last_width: 0,
+            remote: None,
+            duration: 0.0,
+            last_lyrics: None,
             settings,
         };
         model.apply_sidebar_playlists();
@@ -537,6 +579,7 @@ impl Component for App {
         model.bar.set_volume(model.volume, false);
         model.restore_session();
         model.integrations.apply_settings(&model.settings);
+        model.apply_remote();
         model.connect(&sender);
         model.check_health(&sender);
         model.navigate(NavKey::Root(Root::Home), true, &sender);
@@ -883,6 +926,7 @@ impl Component for App {
                 }
             }
             AppMsg::Quit => self.quit(),
+            AppMsg::Remote(op, reply) => self.remote(op, reply, &sender),
         }
     }
 
@@ -1007,6 +1051,7 @@ impl Component for App {
                 }
             }
             CmdOut::Lyrics { id, result } => {
+                self.last_lyrics = Some((id.clone(), result.clone()));
                 if self.queue.current().map(|t| t.video_id.as_str()) == Some(id.as_str()) {
                     self.panel.set_lyrics(&result);
                     self.panel.set_position(self.position);
@@ -1031,6 +1076,7 @@ impl Component for App {
                 }
             }
             CmdOut::Prefetched => self.prefetching = false,
+            CmdOut::RemoteDone => {}
             CmdOut::Suggestions { query, list } => {
                 // Ignore answers for text the user already changed or already searched.
                 let searched = self.nav.last().is_some_and(|e| e.key == NavKey::Search(query.clone()));
@@ -1524,6 +1570,7 @@ impl App {
         self.pending_id = Some(t.video_id.clone());
         self.prepared_next = None;
         self.position = 0.0;
+        self.duration = t.duration.map(f64::from).unwrap_or(0.0);
         self.integrations.track_changed(Some(&t));
         if self.panel.shown == Some(Panel::Lyrics) {
             self.load_lyrics(sender);
@@ -1676,6 +1723,7 @@ impl App {
                 self.integrations.position_changed(p);
             }
             Event::Duration(d) => {
+                self.duration = d;
                 self.bar.set_duration(d);
                 self.integrations.duration_known(d);
             }
@@ -1929,6 +1977,10 @@ impl App {
                 sender.spawn_oneshot_command(move || CmdOut::YtDlpUpdated(r.update_yt_dlp().map_err(err)));
                 return;
             }
+            SettingChange::RemoteControl(v) => {
+                s.remote_control = v;
+                self.apply_remote();
+            }
             SettingChange::ClearCache => {
                 let _ = std::fs::remove_dir_all(crate::settings::cache_dir().join("images"));
                 self.toast("Image cache cleared");
@@ -1939,6 +1991,241 @@ impl App {
         let _ = sender;
     }
 
+    // ---------------- remote control ----------------
+
+    /// Starts or stops the local control socket to match the setting.
+    fn apply_remote(&mut self) {
+        if !self.settings.remote_control {
+            self.remote = None;
+            return;
+        }
+        if self.remote.is_some() {
+            return;
+        }
+        let input = self.input.clone();
+        let started = remote::socket_path().and_then(|path| {
+            remote::start(path, move |op, reply| {
+                // If the app is gone the reply is dropped and the client gets "failed".
+                let _ = input.send(AppMsg::Remote(op, reply));
+            })
+        });
+        match started {
+            Ok(s) => self.remote = Some(s),
+            Err(e) => {
+                eprintln!("velour: remote control: {e:#}");
+                self.toast(&format!("Remote control couldn’t start: {e:#}"));
+            }
+        }
+    }
+
+    fn remote_state(&self) -> Value {
+        let t = self.queue.current();
+        json!({
+            "track": t.map(WTrack::from),
+            "index": t.map(|_| self.queue.position()),
+            "queueLength": self.queue.tracks().len(),
+            "playing": self.loaded_id.is_some() && !self.paused,
+            "loading": self.pending_id.is_some(),
+            "position": self.position,
+            "duration": self.duration,
+            "volume": self.volume,
+            "muted": self.muted,
+            "shuffle": self.queue.shuffle(),
+            "repeat": remote::repeat_name(self.queue.repeat),
+            "signedIn": self.ytm.is_some(),
+        })
+    }
+
+    /// Runs a control message as if it came from the UI, then answers with the new state.
+    fn remote_control(&mut self, msg: AppMsg, reply: Reply, sender: &ComponentSender<Self>) {
+        let root = self.window.clone();
+        <Self as Component>::update(self, msg, sender.clone(), &root);
+        reply.ok(self.remote_state());
+    }
+
+    /// Answers with the result of a YouTube Music call made in the background.
+    fn remote_fetch<F, Fut>(&self, reply: Reply, sender: &ComponentSender<Self>, f: F)
+    where
+        F: FnOnce(Arc<Client>) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = anyhow::Result<Value>> + Send,
+    {
+        let Some(c) = self.ytm.clone() else {
+            reply.err("notSignedIn", "Velour isn’t signed in to YouTube Music yet");
+            return;
+        };
+        sender.oneshot_command(async move {
+            reply.result(f(c).await.map_err(err));
+            CmdOut::RemoteDone
+        });
+    }
+
+    /// Like `api`: the PC shows the same toast as for a local action; the remote gets the outcome.
+    fn remote_api<F, Fut>(&self, reply: Reply, sender: &ComponentSender<Self>, refresh_playlists: bool, f: F)
+    where
+        F: FnOnce(Arc<Client>) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = anyhow::Result<(Value, String)>> + Send,
+    {
+        let Some(c) = self.ytm.clone() else {
+            reply.err("notSignedIn", "Velour isn’t signed in to YouTube Music yet");
+            return;
+        };
+        sender.oneshot_command(async move {
+            match f(c).await.map_err(err) {
+                Ok((v, message)) => {
+                    reply.ok(v);
+                    CmdOut::Done { message: Some(message), error: None, refresh_playlists, reload: false, back: false }
+                }
+                Err(e) => {
+                    reply.err("failed", &e);
+                    CmdOut::Done { message: None, error: Some(e), refresh_playlists: false, reload: false, back: false }
+                }
+            }
+        });
+    }
+
+    fn remote(&mut self, op: Op, reply: Reply, sender: &ComponentSender<Self>) {
+        let len = self.queue.tracks().len();
+        let page = |p: Page| serde_json::to_value(remote::wpage(&p)).map_err(Into::into);
+        match op {
+            Op::State => reply.ok(self.remote_state()),
+            Op::Queue => reply.ok(json!({
+                "index": self.queue.current().map(|_| self.queue.position()),
+                "tracks": self.queue.tracks().iter().map(WTrack::from).collect::<Vec<_>>(),
+                "radio": self.queue.radio.is_some(),
+            })),
+            Op::Lyrics => {
+                let Some(t) = self.queue.current().cloned() else {
+                    reply.err("notFound", "nothing is playing");
+                    return;
+                };
+                if let Some((id, r)) = &self.last_lyrics
+                    && *id == t.video_id
+                {
+                    reply.ok(remote::wlyrics(id, r));
+                    return;
+                }
+                let Some(c) = self.ytm.clone() else {
+                    reply.err("notSignedIn", "Velour isn’t signed in to YouTube Music yet");
+                    return;
+                };
+                let http = self.http.clone();
+                sender.oneshot_command(async move {
+                    let result = lyrics::fetch(&http, &c, &t).await;
+                    reply.ok(remote::wlyrics(&t.video_id, &result));
+                    CmdOut::Lyrics { id: t.video_id, result }
+                });
+            }
+
+            Op::Toggle => self.remote_control(AppMsg::TogglePlay, reply, sender),
+            Op::Next => self.remote_control(AppMsg::Next, reply, sender),
+            Op::Prev => self.remote_control(AppMsg::Prev, reply, sender),
+            Op::Seek { seconds } => self.remote_control(AppMsg::Seek(seconds), reply, sender),
+            Op::Volume { percent } => self.remote_control(AppMsg::SetVolume(percent), reply, sender),
+            Op::Mute { on } if on == self.muted => reply.ok(self.remote_state()),
+            Op::Mute { .. } => self.remote_control(AppMsg::ToggleMute, reply, sender),
+            Op::Shuffle { on } if on == self.queue.shuffle() => reply.ok(self.remote_state()),
+            Op::Shuffle { .. } => self.remote_control(AppMsg::ToggleShuffle, reply, sender),
+            Op::Repeat { mode } => {
+                let want = mode.into();
+                if self.queue.repeat != want {
+                    self.queue.repeat = want;
+                    self.bar.set_repeat(want);
+                    self.prepare_next(sender);
+                    self.integrations.shuffle_repeat_changed(self.queue.shuffle(), want);
+                }
+                reply.ok(self.remote_state());
+            }
+
+            Op::Jump { index } | Op::Remove { index } if index >= len => {
+                reply.err("notFound", "no song at that queue position")
+            }
+            Op::Move { from, to } if from >= len || to >= len => {
+                reply.err("notFound", "no song at that queue position")
+            }
+            Op::Jump { index } => self.remote_control(AppMsg::JumpTo(index), reply, sender),
+            Op::Remove { index } => self.remote_control(AppMsg::RemoveFromQueue(index), reply, sender),
+            Op::Move { from, to } => self.remote_control(AppMsg::MoveInQueue(from, to), reply, sender),
+            Op::Clear => self.remote_control(AppMsg::ClearQueue, reply, sender),
+            Op::PlayNext { track } => self.remote_control(AppMsg::PlayNext(track.into()), reply, sender),
+            Op::AddToQueue { track } => self.remote_control(AppMsg::AddToQueue(track.into()), reply, sender),
+
+            Op::Play { tracks, start, .. } if !tracks[start].playable => {
+                reply.err("badRequest", "that song isn’t available")
+            }
+            Op::Play { tracks, start, shuffle } => self.remote_control(
+                AppMsg::PlayTracks { tracks: tracks.into_iter().map(Into::into).collect(), start, shuffle },
+                reply,
+                sender,
+            ),
+            Op::PlayTarget { .. } | Op::Radio { .. } if self.ytm.is_none() => {
+                reply.err("notSignedIn", "Velour isn’t signed in to YouTube Music yet")
+            }
+            Op::PlayTarget { target } => self.remote_control(AppMsg::PlayTarget(target.into()), reply, sender),
+            Op::Radio { video_id } => self.remote_control(AppMsg::Radio(video_id), reply, sender),
+
+            Op::Search { query } => {
+                self.remote_fetch(reply, sender, move |c| async move { page(c.search(&query).await?) })
+            }
+            Op::Suggest { query } => {
+                self.remote_fetch(reply, sender, move |c| async move { Ok(json!(c.search_suggestions(&query).await?)) })
+            }
+            Op::Page { id, params } => {
+                self.remote_fetch(reply, sender, move |c| async move { page(c.page(&id, params.as_deref()).await?) })
+            }
+            Op::More { token } => self.remote_fetch(reply, sender, move |c| async move { page(c.more(&token).await?) }),
+            Op::Home => self.remote_fetch(reply, sender, move |c| async move { page(c.home().await?) }),
+            Op::Library { tab } => self.remote_fetch(reply, sender, move |c| async move {
+                page(match tab {
+                    RemoteTab::Playlists => c.library_playlists().await?,
+                    RemoteTab::Albums => c.library_albums().await?,
+                    RemoteTab::Artists => c.library_artists().await?,
+                })
+            }),
+            Op::Liked => self.remote_fetch(reply, sender, move |c| async move { page(c.liked_songs().await?) }),
+            Op::History => self.remote_fetch(reply, sender, move |c| async move { page(c.history().await?) }),
+
+            Op::Rate { video_id, like } => {
+                let status: LikeStatus = like.into();
+                // Same optimistic update as a local like.
+                self.queue_set_like(&video_id, Some(status));
+                if self.queue.current().map(|t| t.video_id.as_str()) == Some(video_id.as_str()) {
+                    self.bar.set_like(Some(status));
+                }
+                self.remote_api(reply, sender, false, move |c| async move {
+                    c.rate_song(&video_id, status).await?;
+                    let msg = match status {
+                        LikeStatus::Like => "Added to Liked Music",
+                        _ => "Removed from Liked Music",
+                    };
+                    Ok((json!({}), msg.to_string()))
+                });
+            }
+            Op::Playlists => reply.ok(json!(
+                self.own_playlists.iter().map(|(id, title)| json!({ "id": id, "title": title })).collect::<Vec<_>>()
+            )),
+            Op::AddToPlaylist { playlist_id, video_ids } => {
+                let name = self
+                    .own_playlists
+                    .iter()
+                    .find(|(id, _)| *id == playlist_id)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_else(|| "the playlist".into());
+                self.remote_api(reply, sender, false, move |c| async move {
+                    let ids: Vec<&str> = video_ids.iter().map(String::as_str).collect();
+                    c.add_to_playlist(&playlist_id, &ids).await?;
+                    Ok((json!({}), format!("Added to {name}")))
+                });
+            }
+            Op::CreatePlaylist { title, video_ids } => {
+                self.remote_api(reply, sender, true, move |c| async move {
+                    let ids: Vec<&str> = video_ids.iter().map(String::as_str).collect();
+                    let id = c.create_playlist(&title, &ids).await?;
+                    Ok((json!({ "id": id }), format!("Created “{title}”")))
+                });
+            }
+        }
+    }
+
     fn quit(&mut self) {
         Session { queue: self.queue.clone(), position: self.position }.save();
         crate::settings::write_json(&crate::settings::state_dir().join("streams.json"), &self.resolver.export_cache());
@@ -1947,6 +2234,7 @@ impl App {
             let _ = p.stop();
         }
         self.hold = None;
+        self.remote = None;
         relm4::main_application().quit();
     }
 }

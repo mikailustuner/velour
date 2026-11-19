@@ -14,6 +14,7 @@ gtk = { version = "0.11.5", package = "gtk4", features = ["v4_20"] }
 hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 ksni = { version = "0.3.7", default-features = false, features = ["async-io"] }
+libc = "0.2.191"
 mpris-server = "0.11"
 rand = "0.9"
 relm4 = "0.11.0"
