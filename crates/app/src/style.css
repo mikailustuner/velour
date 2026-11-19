@@ -32,6 +32,7 @@ window.sonora {
   /* Overridden per track from the cover art (see player_bar.rs). */
   --cover-glow: rgba(0, 0, 0, 0);
   --cover-tint: rgba(0, 0, 0, 0);
+  --cover-tint-strong: rgba(94, 92, 230, 0.18);
 }
 
 @media (prefers-color-scheme: light) {
@@ -650,4 +651,62 @@ window.sonora entry {
 
 window.sonora switch:checked {
   background: var(--accent);
+}
+
+/* ---------- search suggestions ---------- */
+
+list.suggestions {
+  background: transparent;
+}
+
+list.suggestions > row {
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+list.suggestions > row:hover,
+list.suggestions > row:selected {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* ---------- list tools ---------- */
+
+.list-tools searchentry {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  min-height: 32px;
+  box-shadow: none;
+}
+
+/* ---------- now playing view ---------- */
+
+.now-playing-view {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 50% 42%, var(--cover-tint-strong), transparent 62%);
+  padding: 14px;
+}
+
+.np-cover {
+  border-radius: 26px;
+  box-shadow: 0 24px 70px var(--cover-glow), 0 0 0 1px var(--card-border);
+  margin-bottom: 10px;
+}
+
+.np-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.np-artist {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.np-album {
+  font-size: 14px;
+  color: var(--text2);
 }

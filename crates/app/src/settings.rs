@@ -50,6 +50,10 @@ pub struct Settings {
     pub download_dir: PathBuf,
     /// Record plays in the YouTube Music history (improves recommendations).
     pub send_history: bool,
+    /// Offline downloads are opt-in (personal use only; see README).
+    pub downloads: bool,
+    /// Browser to take the YouTube Music sign-in from.
+    pub browser: String,
     /// Software rendering: ~160 MB less memory but far more CPU while scrolling.
     pub low_memory: bool,
 }
@@ -71,6 +75,8 @@ impl Default for Settings {
             download_dir: music.join("Sonora"),
             send_history: true,
             low_memory: false,
+            browser: "firefox".into(),
+            downloads: false,
         }
     }
 }

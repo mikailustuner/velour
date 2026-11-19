@@ -7,7 +7,7 @@ use std::sync::mpsc;
 fn main() -> anyhow::Result<()> {
     let ao = std::env::args().nth(1).unwrap_or_else(|| "null".into());
     let profile = sonora_ytm::auth::default_firefox_profile()?;
-    let resolver = Resolver::new(profile);
+    let resolver = Resolver::new(format!("firefox:{}", profile.display()));
 
     let t = std::time::Instant::now();
     let a = resolver.resolve("TtSr-J-SYMw")?;

@@ -28,6 +28,7 @@ pub struct PlayerBar {
     elapsed: gtk::Label,
     duration_label: gtk::Label,
     volume: gtk::Scale,
+    center: gtk::Box,
     mute: gtk::Button,
     duration: Cell<f64>,
     /// Pending seek while the user drags (debounced).
@@ -42,7 +43,7 @@ pub struct PlayerBar {
 fn set_glow(provider: &gtk::CssProvider, color: Option<(u8, u8, u8)>) {
     let css = match color {
         Some((r, g, b)) => format!(
-            "window.sonora {{ --cover-glow: rgba({r},{g},{b},0.50); --cover-tint: rgba({r},{g},{b},0.24); --glow-a: rgba({r},{g},{b},0.08); }}"
+            "window.sonora {{ --cover-glow: rgba({r},{g},{b},0.50); --cover-tint: rgba({r},{g},{b},0.24); --cover-tint-strong: rgba({r},{g},{b},0.30); --glow-a: rgba({r},{g},{b},0.08); }}"
         ),
         None => String::new(),
     };
@@ -56,7 +57,8 @@ impl PlayerBar {
 
         // ---- left: cover + text ----
         let left = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        left.set_width_request(260);
+        // Small minimums so the window can get narrow; natural sizes stay generous.
+        left.set_width_request(150);
         let (cover_box, cover) = small_cover(52, "cover-small");
         cover.update_property(&[gtk::accessible::Property::Label("Album cover")]);
         let text = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -66,12 +68,12 @@ impl PlayerBar {
         title.add_css_class("track-title");
         title.set_xalign(0.0);
         title.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        title.set_max_width_chars(28);
+        title.set_max_width_chars(22);
         let artist = gtk::Label::new(Some("Pick a song to start"));
         artist.add_css_class("track-artist");
         artist.set_xalign(0.0);
         artist.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        artist.set_max_width_chars(28);
+        artist.set_max_width_chars(22);
         text.append(&title);
         text.append(&artist);
         let like = icon_button(icons::FAVORITE_SYMBOLIC, "Like (Ctrl+L)");
@@ -83,12 +85,21 @@ impl PlayerBar {
         }
         left.append(&cover_box);
         left.append(&text);
+        // Cover and title open the now-playing view.
+        for w in [cover_box.upcast_ref::<gtk::Widget>(), text.upcast_ref::<gtk::Widget>()] {
+            let click = gtk::GestureClick::new();
+            let s = sender.clone();
+            click.connect_released(move |_, _, _, _| s.emit(AppMsg::ToggleNowPlaying));
+            w.add_controller(click);
+            w.set_cursor_from_name(Some("pointer"));
+            w.set_tooltip_text(Some("Now playing (P)"));
+        }
         left.append(&like);
 
         // ---- center: transport + progress ----
         let center = gtk::Box::new(gtk::Orientation::Vertical, 4);
         center.set_valign(gtk::Align::Center);
-        center.set_width_request(520);
+        center.set_width_request(300);
         center.set_hexpand(false);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 12);
         buttons.set_halign(gtk::Align::Center);
@@ -153,7 +164,7 @@ impl PlayerBar {
         let right = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         right.set_valign(gtk::Align::Center);
         right.set_halign(gtk::Align::End);
-        right.set_width_request(260);
+
         let lyrics = toggle(icons::LYRICS_SYMBOLIC, "Lyrics");
         let queue = toggle(icons::QUEUE_MUSIC_SYMBOLIC, "Queue");
         {
@@ -212,6 +223,7 @@ impl PlayerBar {
 
         Self {
             glow,
+            center: center.clone(),
             root,
             cover,
             title,
@@ -264,6 +276,14 @@ impl PlayerBar {
         self.set_position(0.0);
     }
 
+    /// Narrow windows: hide the volume slider and tighten the columns.
+    /// Narrow windows: hide the volume slider. Minimum widths stay small at all times
+    /// (a window can't shrink below its minimum, so they must not depend on its width).
+    pub fn set_compact(&self, compact: bool) {
+        self.volume.set_visible(!compact);
+        self.center.set_size_request(if compact { 300 } else { 440 }, -1);
+    }
+
     pub fn set_like(&self, like: Option<LikeStatus>) {
         if like == Some(LikeStatus::Like) {
             set_icon_button(&self.like, icons::FAVORITE_FILL_SYMBOLIC, "Remove from Liked (Ctrl+L)");
@@ -297,7 +317,8 @@ impl PlayerBar {
         if self.dragging.get() || self.seek_timer.borrow().is_some() {
             return;
         }
-        self.progress.set_value(p);
+        // Unknown duration (restored session): keep the bar empty rather than full.
+        self.progress.set_value(if self.duration.get() > 0.0 { p } else { 0.0 });
         self.elapsed.set_label(&fmt_duration(p.max(0.0) as u32));
     }
 

@@ -43,11 +43,68 @@ impl Cookies {
         let _ = std::fs::remove_dir_all(&tmp);
         let pairs = result.with_context(|| format!("reading cookies from {}", profile.display()))?;
 
+        Self::from_pairs(pairs)
+    }
+
+    /// Browsers yt-dlp can read cookies from (besides the native Firefox path).
+    pub const BROWSERS: [&'static str; 7] = ["firefox", "chrome", "chromium", "brave", "edge", "vivaldi", "opera"];
+
+    /// Reads cookies from `browser`. Firefox is read directly; Chromium-based browsers
+    /// encrypt cookies, so yt-dlp (which knows how to decrypt them) exports them to a
+    /// private temp file that is deleted right after reading.
+    pub fn from_browser(browser: &str, yt_dlp: &Path) -> Result<Self> {
+        if browser == "firefox" {
+            return Self::from_firefox();
+        }
+        let dir = std::env::temp_dir().join(format!("sonora-cookies-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+        }
+        let file = dir.join("cookies.txt");
+        let run = std::process::Command::new(yt_dlp)
+            .args(["-q", "--no-warnings", "--skip-download", "--ignore-errors", "--cookies-from-browser", browser, "--cookies"])
+            .arg(&file)
+            // Any URL works: yt-dlp writes the cookie jar on exit. This one never resolves.
+            .arg("https://cookies.invalid/")
+            .output();
+        let text = std::fs::read_to_string(&file);
+        let _ = std::fs::remove_dir_all(&dir);
+        run.context("starting yt-dlp to read browser cookies")?;
+        let text = text.with_context(|| format!("couldn't read {browser} cookies (is it installed and signed in?)"))?;
+        Self::from_netscape(&text)
+    }
+
+    /// Parses a Netscape cookie file, keeping youtube.com cookies.
+    pub fn from_netscape(text: &str) -> Result<Self> {
+        let mut pairs: Vec<(String, String)> = vec![];
+        for line in text.lines() {
+            // "#HttpOnly_" prefixed lines are real cookies.
+            let line = line.strip_prefix("#HttpOnly_").unwrap_or(line);
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            let f: Vec<&str> = line.split('\t').collect();
+            if f.len() < 7 {
+                continue;
+            }
+            let (domain, name, value) = (f[0], f[5], f[6]);
+            let ok_domain = matches!(domain, ".youtube.com" | "youtube.com" | "music.youtube.com" | ".music.youtube.com");
+            if ok_domain && !pairs.iter().any(|(n, _)| n == name) {
+                pairs.push((name.to_string(), value.to_string()));
+            }
+        }
+        Self::from_pairs(pairs)
+    }
+
+    fn from_pairs(pairs: Vec<(String, String)>) -> Result<Self> {
         let sapisid = pairs
             .iter()
             .find(|(n, _)| n == "SAPISID" || n == "__Secure-3PAPISID")
             .map(|(_, v)| v.clone())
-            .context("no SAPISID cookie: log in to YouTube in Firefox first")?;
+            .context("not signed in: log in to music.youtube.com in your browser first")?;
         // ST-* are short-lived page-state cookies; sending them all blows past header limits (413).
         let header = pairs.iter().filter(|(n, _)| !n.starts_with("ST-")).map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; ");
         Ok(Self { header, sapisid })
@@ -83,4 +140,27 @@ pub fn default_firefox_profile() -> Result<PathBuf> {
         }
     }
     bail!("no Firefox profile with cookies found under {}", root.display())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn netscape_parsing() {
+        let text = "# Netscape HTTP Cookie File\n\
+.youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tabc\n\
+#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tsid1\n\
+.youtube.com\tTRUE\t/\tTRUE\t0\tST-xyz\tjunk\n\
+.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tduplicate\n\
+.google.com\tTRUE\t/\tTRUE\t0\tNID\tother\n";
+        let c = Cookies::from_netscape(text).unwrap();
+        assert_eq!(c.header(), "SAPISID=abc; SID=sid1");
+        assert!(c.sapisid_hash().starts_with("SAPISIDHASH "));
+    }
+
+    #[test]
+    fn signed_out_is_an_error() {
+        assert!(Cookies::from_netscape(".youtube.com\tTRUE\t/\tTRUE\t0\tPREF\tx\n").is_err());
+    }
 }

@@ -5,6 +5,7 @@ mod images;
 mod integrations;
 mod lyrics;
 mod msg;
+mod now_playing;
 mod page_view;
 mod player_bar;
 mod queue;

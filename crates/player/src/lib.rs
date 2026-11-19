@@ -2,7 +2,7 @@
 
 mod resolver;
 
-pub use resolver::Resolver;
+pub use resolver::{Health, Resolver, looks_outdated};
 
 use anyhow::{Result, anyhow};
 use libmpv2::{Format, Mpv, events::Event as MpvEvent, events::PropertyData};

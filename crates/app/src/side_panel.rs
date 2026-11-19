@@ -19,6 +19,7 @@ pub enum Panel {
 pub struct SidePanel {
     pub root: gtk::Revealer,
     stack: gtk::Stack,
+    save_button: gtk::Button,
     queue_list: gtk::ListBox,
     queue_rows: Vec<gtk::ListBoxRow>,
     lyrics_scroll: gtk::ScrolledWindow,
@@ -37,7 +38,8 @@ impl SidePanel {
         root.set_transition_duration(200);
         let frame = gtk::Box::new(gtk::Orientation::Vertical, 0);
         frame.add_css_class("side-panel");
-        frame.set_width_request(320);
+        frame.set_size_request(340, -1);
+        frame.set_hexpand(false);
         root.set_child(Some(&frame));
 
         let stack = gtk::Stack::new();
@@ -46,7 +48,24 @@ impl SidePanel {
 
         // queue
         let q = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        q.append(&panel_title("Up next"));
+        let head = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let t = panel_title("Up next");
+        t.set_hexpand(true);
+        head.append(&t);
+        let save = icon_button(icons::LIBRARY_ADD_SYMBOLIC, "Save queue as playlist");
+        let clear = icon_button(icons::DELETE_SYMBOLIC, "Clear queue (keeps the current song)");
+        for b in [&save, &clear] {
+            b.add_css_class("dim");
+        }
+        {
+            let s = sender.clone();
+            save.connect_clicked(move |_| s.emit(AppMsg::SaveQueue));
+            let s = sender.clone();
+            clear.connect_clicked(move |_| s.emit(AppMsg::ClearQueue));
+        }
+        head.append(&save);
+        head.append(&clear);
+        q.append(&head);
         let queue_list = gtk::ListBox::new();
         queue_list.add_css_class("tracks");
         queue_list.set_selection_mode(gtk::SelectionMode::None);
@@ -82,6 +101,7 @@ impl SidePanel {
         Self {
             root,
             stack,
+            save_button: save,
             queue_list,
             queue_rows: vec![],
             lyrics_scroll,
@@ -92,6 +112,10 @@ impl SidePanel {
             sender: sender.clone(),
             shown: None,
         }
+    }
+
+    pub fn save_button(&self) -> gtk::Button {
+        self.save_button.clone()
     }
 
     pub fn show(&mut self, panel: Option<Panel>) {
@@ -197,6 +221,8 @@ impl SidePanel {
                     l.add_css_class("lyric-line");
                     l.set_xalign(0.0);
                     l.set_wrap(true);
+                    // Long lines wrap instead of widening the panel.
+                    l.set_max_width_chars(26);
                     // Clicking a line jumps there.
                     let click = gtk::GestureClick::new();
                     let (s, t) = (self.sender.clone(), *t);
@@ -212,6 +238,7 @@ impl SidePanel {
                 l.add_css_class("lyric-plain");
                 l.set_xalign(0.0);
                 l.set_wrap(true);
+                l.set_max_width_chars(34);
                 l.set_selectable(true);
                 self.lyrics_box.append(&l);
             }

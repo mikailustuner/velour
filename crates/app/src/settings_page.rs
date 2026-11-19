@@ -7,7 +7,7 @@ use crate::settings::{Settings, Theme};
 use gtk::prelude::*;
 use relm4::Sender;
 
-pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str) -> gtk::Widget {
+pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str, health: Option<&sonora_player::Health>) -> gtk::Widget {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 28);
     page.add_css_class("page");
     page.append(&large_title("Settings"));
@@ -75,6 +75,7 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str) -> gtk::Widge
 
     // ---- storage ----
     let g = group(&page, "Storage");
+    switch(&g, "Offline downloads", Some("Save songs for offline listening. Only for content you have the right to keep, for personal use; check YouTube’s terms first."), s.downloads, sender, SettingChange::Downloads);
     let dir = gtk::Button::with_label(&s.download_dir.display().to_string());
     dir.add_css_class("pill");
     {
@@ -100,10 +101,54 @@ pub fn build(s: &Settings, sender: &Sender<AppMsg>, account: &str) -> gtk::Widge
     }
     row(&g, "Cover art cache", Some("Downloaded covers older than 30 days are removed automatically."), &clear);
 
-    // ---- account & about ----
+    // ---- playback helpers ----
+    let g = group(&page, "Playback helpers");
+    let (version_text, can_update) = match health {
+        None => ("Checking…".to_string(), false),
+        Some(h) => match (&h.yt_dlp_version, h.yt_dlp_age_days) {
+            (Some(v), Some(age)) => (format!("Version {v} ({age} days old)"), h.updatable),
+            (Some(v), None) => (format!("Version {v}"), h.updatable),
+            (None, _) => ("Not found — install yt-dlp to play music".to_string(), false),
+        },
+    };
+    let update = gtk::Button::with_label("Update");
+    update.add_css_class("pill");
+    update.set_sensitive(can_update);
+    if !can_update && health.is_some_and(|h| h.yt_dlp_version.is_some()) {
+        update.set_tooltip_text(Some("Installed by the system package manager; update it there."));
+    }
+    {
+        let s = sender.clone();
+        update.connect_clicked(move |_| s.emit(AppMsg::Settings(SettingChange::UpdateYtDlp)));
+    }
+    row(&g, "yt-dlp", Some(&version_text), &update);
+    let js = match health {
+        Some(h) if h.js_runtime => "Found",
+        Some(_) => "Missing — install deno for reliable playback",
+        None => "Checking…",
+    };
+    row(&g, "JavaScript runtime (deno)", Some(js), &gtk::Box::new(gtk::Orientation::Horizontal, 0));
+
+    // ---- account ----
+    let g = group(&page, "Account");
+    let browsers = sonora_ytm::Cookies::BROWSERS;
+    let names: Vec<String> = browsers.iter().map(|b| capitalize(b)).collect();
+    let names_ref: Vec<&str> = names.iter().map(String::as_str).collect();
+    let browser = gtk::DropDown::from_strings(&names_ref);
+    browser.set_selected(browsers.iter().position(|b| *b == s.browser).unwrap_or(0) as u32);
+    {
+        let s = sender.clone();
+        browser.connect_selected_notify(move |d| {
+            if let Some(b) = sonora_ytm::Cookies::BROWSERS.get(d.selected() as usize) {
+                s.emit(AppMsg::Settings(SettingChange::Browser(b.to_string())));
+            }
+        });
+    }
+    let who = if account.is_empty() { "Not signed in".to_string() } else { format!("Signed in as {account}") };
+    row(&g, "Sign in with browser", Some(&format!("{who}. Sonora uses the browser’s YouTube Music session; nothing is stored or sent elsewhere.")), &browser);
+
+    // ---- about ----
     let g = group(&page, "About");
-    let who = if account.is_empty() { "Not signed in".to_string() } else { format!("Signed in as {account} (from Firefox)") };
-    row(&g, "Account", Some(&who), &gtk::Box::new(gtk::Orientation::Horizontal, 0));
     row(&g, &format!("Sonora {}", env!("CARGO_PKG_VERSION")), Some("Space play/pause · Ctrl+←/→ previous/next · Shift+←/→ seek · Ctrl+↑/↓ volume · M mute · Ctrl+L like · Ctrl+F search · Alt+← back · Ctrl+Q quit"), &gtk::Box::new(gtk::Orientation::Horizontal, 0));
 
     let scroll = gtk::ScrolledWindow::new();
@@ -160,4 +205,9 @@ fn switch(list: &gtk::ListBox, title: &str, subtitle: Option<&str>, value: bool,
     let s = sender.clone();
     sw.connect_active_notify(move |w| s.emit(AppMsg::Settings(make(w.is_active()))));
     row(list, title, subtitle, &sw);
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
 }

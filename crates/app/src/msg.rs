@@ -26,6 +26,8 @@ pub enum AppMsg {
     Root(Root),
     Open(Target),
     Search(String),
+    /// Search box text changed (for suggestions).
+    SearchTyped(String),
     Back,
     Reload,
     LoadMore,
@@ -33,6 +35,8 @@ pub enum AppMsg {
     // ---- playback ----
     PlayTracks { tracks: Vec<Track>, start: usize, shuffle: bool },
     PlayTarget(Target),
+    /// Resolve a stream ahead of time (pointer resting on a song or Play button).
+    Prefetch(String),
     Radio(String),
     PlayNext(Track),
     AddToQueue(Track),
@@ -56,7 +60,11 @@ pub enum AppMsg {
     RateCurrent,
     AddToPlaylist { playlist_id: String, track: Track },
     NewPlaylist(Option<Track>),
-    CreatePlaylist { title: String, track: Option<Track> },
+    CreatePlaylist { title: String, tracks: Vec<Track> },
+    /// Keep only the current song in the queue.
+    ClearQueue,
+    /// Save the queue as a new playlist (title asked first).
+    SaveQueue,
     RemoveFromPlaylist { playlist_id: String, track: Track },
     RenamePlaylist { playlist_id: String, title: String },
     DeletePlaylist(String),
@@ -66,6 +74,9 @@ pub enum AppMsg {
 
     // ---- ui ----
     ToggleQueue,
+    ToggleNowPlaying,
+    /// Escape: closes the now-playing view if open.
+    Escape,
     ToggleLyrics,
     LyricsTick,
     ToggleTheme,
@@ -89,5 +100,8 @@ pub enum SettingChange {
     DownloadDir(std::path::PathBuf),
     SendHistory(bool),
     LowMemory(bool),
+    Browser(String),
+    Downloads(bool),
     ClearCache,
+    UpdateYtDlp,
 }

@@ -21,6 +21,8 @@ pub struct Ctx {
     /// The user's own playlists for "Add to playlist": (id, title).
     pub own_playlists: Rc<Vec<(String, String)>>,
     pub downloaded: Rc<HashSet<String>>,
+    /// Offline downloads enabled in Settings (opt-in).
+    pub downloads_enabled: bool,
     pub playing: Option<String>,
 }
 
@@ -100,15 +102,34 @@ impl PageView {
                 tl.list.set_selection_mode(gtk::SelectionMode::None);
                 tl.list.set_activate_on_single_click(false);
                 {
+                    // Play in the order currently shown (after filter/sort).
                     let tracks = tl.tracks.clone();
                     let sender = self.ctx.sender.clone();
-                    tl.list.connect_row_activated(move |_, row| {
-                        let tracks = tracks.borrow().clone();
-                        let start = row.index() as usize;
-                        if tracks.get(start).is_some_and(|t| t.playable) {
-                            sender.emit(AppMsg::PlayTracks { tracks, start, shuffle: false });
+                    tl.list.connect_row_activated(move |list, row| {
+                        let all = tracks.borrow();
+                        let mut visible = vec![];
+                        let mut start = 0;
+                        let mut child = list.first_child();
+                        while let Some(w) = child {
+                            if let Ok(r) = w.clone().downcast::<gtk::ListBoxRow>() {
+                                if r.is_child_visible() {
+                                    if let Some(t) = row_index(&r).and_then(|i| all.get(i)) {
+                                        if r == *row {
+                                            start = visible.len();
+                                        }
+                                        visible.push(t.clone());
+                                    }
+                                }
+                            }
+                            child = w.next_sibling();
+                        }
+                        if visible.get(start).is_some_and(|t| t.playable) {
+                            sender.emit(AppMsg::PlayTracks { tracks: visible, start, shuffle: false });
                         }
                     });
+                }
+                if !numbered && s.items.len() >= 15 {
+                    block.append(&list_tools(&tl));
                 }
                 self.append_tracks(&tl, s.items.iter().filter_map(as_track));
                 block.append(&tl.list);
@@ -148,6 +169,8 @@ impl PageView {
         for t in tracks {
             let index = tl.tracks.borrow().len();
             let row = track_row(t, index, tl.numbered, &self.ctx);
+            // Original position, used by filter/sort and "play from here".
+            row.set_widget_name(&index.to_string());
             if self.ctx.playing.as_deref() == Some(t.video_id.as_str()) {
                 row.add_css_class("playing");
             }
@@ -180,6 +203,134 @@ impl PageView {
             }
         }
     }
+}
+
+/// Asks the app to resolve `id` when the pointer rests on `w` for a moment.
+fn prefetch_on_hover(w: &impl IsA<gtk::Widget>, id: Option<String>, sender: &Sender<AppMsg>) {
+    let Some(id) = id else { return };
+    let motion = gtk::EventControllerMotion::new();
+    let timer: Rc<RefCell<Option<glib::SourceId>>> = Rc::default();
+    {
+        let (timer, sender) = (timer.clone(), sender.clone());
+        motion.connect_enter(move |_, _, _| {
+            let (id, sender, t2) = (id.clone(), sender.clone(), timer.clone());
+            if let Some(old) = timer.borrow_mut().replace(glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
+                t2.borrow_mut().take();
+                sender.emit(AppMsg::Prefetch(id));
+            })) {
+                old.remove();
+            }
+        });
+    }
+    motion.connect_leave(move |_| {
+        if let Some(t) = timer.borrow_mut().take() {
+            t.remove();
+        }
+    });
+    w.as_ref().add_controller(motion);
+}
+
+/// Lowercase + Turkish/Latin letter folding so "sarki" finds "Şarkı" and "istanbul" "İstanbul".
+pub fn fold(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .filter(|c| *c != '\u{307}')
+        .map(|c| match c {
+            'ı' => 'i',
+            'ş' => 's',
+            'ğ' => 'g',
+            'ü' => 'u',
+            'ö' => 'o',
+            'ç' => 'c',
+            'â' | 'á' | 'à' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'í' | 'ï' => 'i',
+            'ô' | 'ó' => 'o',
+            'û' | 'ú' => 'u',
+            c => c,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn folding() {
+        assert_eq!(super::fold("Şarkı İstanbul Gönül"), "sarki istanbul gonul");
+        assert_eq!(super::fold("ÇAĞRI"), "cagri");
+    }
+}
+
+fn row_index(r: &gtk::ListBoxRow) -> Option<usize> {
+    r.widget_name().parse().ok()
+}
+
+/// Filter box + sort menu for long track lists.
+fn list_tools(tl: &TrackList) -> gtk::Box {
+    let bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    bar.add_css_class("list-tools");
+    let filter = gtk::SearchEntry::new();
+    filter.set_placeholder_text(Some("Filter songs"));
+    filter.update_property(&[gtk::accessible::Property::Label("Filter songs in this list")]);
+    filter.set_width_chars(24);
+    let sort = gtk::DropDown::from_strings(&["List order", "Title", "Artist", "Album", "Duration"]);
+    sort.update_property(&[gtk::accessible::Property::Label("Sort songs")]);
+    sort.set_tooltip_text(Some("Sort songs"));
+    bar.append(&filter);
+    bar.append(&sort);
+
+    let query: Rc<RefCell<String>> = Rc::default();
+    {
+        let (tracks, query) = (tl.tracks.clone(), query.clone());
+        tl.list.set_filter_func(move |row| {
+            let q = query.borrow();
+            if q.is_empty() {
+                return true;
+            }
+            let all = tracks.borrow();
+            let Some(t) = row_index(row).and_then(|i| all.get(i)) else { return true };
+            let hay = fold(&format!("{} {} {}", t.title, t.artist_line(), t.album.as_ref().map(|a| a.name.as_str()).unwrap_or("")));
+            q.split_whitespace().all(|w| hay.contains(w))
+        });
+    }
+    {
+        let (list, query) = (tl.list.clone(), query.clone());
+        filter.connect_search_changed(move |e| {
+            *query.borrow_mut() = fold(&e.text());
+            list.invalidate_filter();
+        });
+    }
+    let mode = Rc::new(std::cell::Cell::new(0u32));
+    {
+        let (tracks, mode) = (tl.tracks.clone(), mode.clone());
+        tl.list.set_sort_func(move |a, b| {
+            let (ia, ib) = (row_index(a).unwrap_or(0), row_index(b).unwrap_or(0));
+            let all = tracks.borrow();
+            let (Some(x), Some(y)) = (all.get(ia), all.get(ib)) else { return gtk::Ordering::Equal };
+            let key = |t: &Track| -> String {
+                match mode.get() {
+                    1 => t.title.to_lowercase(),
+                    2 => t.artist_line().to_lowercase(),
+                    3 => t.album.as_ref().map(|a| a.name.to_lowercase()).unwrap_or_default(),
+                    _ => String::new(),
+                }
+            };
+            let ord = match mode.get() {
+                0 => ia.cmp(&ib),
+                4 => x.duration.cmp(&y.duration).then(ia.cmp(&ib)),
+                _ => key(x).cmp(&key(y)).then(ia.cmp(&ib)),
+            };
+            ord.into()
+        });
+    }
+    {
+        let list = tl.list.clone();
+        sort.connect_selected_notify(move |d| {
+            mode.set(d.selected());
+            list.invalidate_sort();
+        });
+    }
+    bar
 }
 
 fn as_track(i: &Item) -> Option<&Track> {
@@ -348,6 +499,7 @@ fn header(h: &Header, tracks: &[Track], ctx: &Ctx) -> gtk::Box {
                 s.emit(AppMsg::PlayTarget(target.clone()));
             }
         });
+        prefetch_on_hover(&play, tracks.iter().find(|t| t.playable).map(|t| t.video_id.clone()), sender);
         buttons.append(&play);
     }
     if has_tracks {
@@ -365,7 +517,7 @@ fn header(h: &Header, tracks: &[Track], ctx: &Ctx) -> gtk::Box {
         r.connect_clicked(move |_| s.emit(AppMsg::PlayTarget(radio.clone())));
         buttons.append(&r);
     }
-    if has_tracks {
+    if has_tracks && ctx.downloads_enabled {
         let dl = icon_button(icons::DOWNLOAD_SYMBOLIC, "Download all");
         let (s, t) = (sender.clone(), tracks.to_vec());
         dl.connect_clicked(move |_| s.emit(AppMsg::Download(t.iter().filter(|x| x.playable).cloned().collect())));
@@ -440,6 +592,9 @@ fn tile(item: &Item, section_tracks: &[Track], ctx: &Ctx) -> gtk::Widget {
                 images::load(&pic, c.thumbnail.as_deref(), h as u32);
             }
             v.append(&pic);
+            if let Target::Watch { video_id, .. } = &c.target {
+                prefetch_on_hover(&b, video_id.clone(), &ctx.sender);
+            }
             let msg_target = c.target.clone();
             b.connect_clicked(move |_| {
                 let msg = match &msg_target {
@@ -465,6 +620,7 @@ fn tile(item: &Item, section_tracks: &[Track], ctx: &Ctx) -> gtk::Widget {
             overlay.add_overlay(&more);
             v.append(&overlay);
             attach_track_menu(&b, &more);
+            prefetch_on_hover(&b, Some(t.video_id.clone()), &ctx.sender);
             v.set_width_request(160);
             let start = section_tracks.iter().position(|x| x.video_id == t.video_id).unwrap_or(0);
             let tracks = section_tracks.to_vec();
@@ -615,6 +771,9 @@ fn track_row(t: &Track, index: usize, numbered: bool, ctx: &Ctx) -> gtk::ListBox
         row.set_tooltip_text(Some("This song isn’t available."));
     }
     attach_track_menu(&row, &more);
+    if t.playable {
+        prefetch_on_hover(&row, Some(t.video_id.clone()), &ctx.sender);
+    }
     row
 }
 
@@ -739,7 +898,7 @@ pub fn track_menu(t: &Track, ctx: &Ctx) -> gtk::Popover {
     if ctx.downloaded.contains(&t.video_id) {
         let id = t.video_id.clone();
         add(&main, "Delete download", icons::DELETE_SYMBOLIC, Box::new(move || AppMsg::DeleteDownload(id.clone())));
-    } else if t.playable {
+    } else if t.playable && ctx.downloads_enabled {
         let tr = t.clone();
         add(&main, "Download", icons::DOWNLOAD_SYMBOLIC, Box::new(move || AppMsg::Download(vec![tr.clone()])));
     }
