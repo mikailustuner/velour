@@ -109,6 +109,8 @@ pub enum AppMsg {
 
     // ---- local control socket ----
     Remote(crate::remote::Op, crate::remote::Reply),
+    /// 200 ms tick while remote clients wait for changes or a sleep timer runs.
+    RemoteTick,
 }
 
 #[derive(Debug, Clone)]

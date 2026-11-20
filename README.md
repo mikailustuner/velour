@@ -25,7 +25,8 @@ already sees, and audio through libmpv.
   save the queue as a playlist; filter and sort long playlists
 - **Desktop** — MPRIS (media keys, `playerctl`), keeps playing when closed, single instance,
   optional notifications, tray icon and Discord status, equalizer presets, an optional local
-  [remote-control socket](docs/remote-control.md) (e.g. for a phone remote)
+  [remote-control socket](docs/remote-control.md) (e.g. for a phone remote, with live updates and a
+  sleep timer)
 - **Fast** — cached pages open instantly, songs are prepared when you hover them and the next song
   is resolved ahead of time
 - Sign in with **Firefox, Chrome, Chromium, Brave, Edge, Vivaldi or Opera**

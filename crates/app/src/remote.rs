@@ -11,6 +11,7 @@ use crate::lyrics::{Lyrics, LyricsResult};
 use crate::queue::Repeat;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -29,6 +30,14 @@ const IO_TIMEOUT: Duration = Duration::from_secs(5);
 const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_TRACKS: usize = 2000;
 const MAX_TEXT: usize = 300;
+/// `wait` long-polls; the longest one stays under REPLY_TIMEOUT.
+pub const DEFAULT_WAIT: u32 = 20;
+const MAX_WAIT: u32 = 25;
+const MAX_SLEEP_MINUTES: u32 = 720;
+/// The sleep timer lowers the volume over its last seconds.
+pub const FADE_SECS: f64 = 8.0;
+/// Position drift (s) beyond normal playback that counts as a seek.
+const SEEK_SLACK: f64 = 1.5;
 
 // =====================================================================
 // wire types
@@ -355,6 +364,36 @@ pub fn wlyrics(video_id: &str, r: &LyricsResult) -> Value {
     json!({ "videoId": video_id, "kind": kind, "lines": lines, "text": text, "source": r.source })
 }
 
+/// Cheap id of the queue contents and position, so a client knows when to refetch `queue`.
+pub fn queue_rev<'a>(ids: impl IntoIterator<Item = &'a str>, index: Option<usize>, radio: bool) -> u32 {
+    let mut h = DefaultHasher::new();
+    ids.into_iter().for_each(|id| id.hash(&mut h));
+    (index, radio).hash(&mut h);
+    h.finish() as u32
+}
+
+/// Hash of a state answer without its position (which moves on by itself while playing).
+pub fn fingerprint(state: &Value) -> u64 {
+    let mut v = state.clone();
+    if let Some(o) = v.as_object_mut() {
+        o.remove("position");
+    }
+    let mut h = DefaultHasher::new();
+    v.to_string().hash(&mut h);
+    h.finish()
+}
+
+/// True when the position moved other than by playing on (seek, jump) since it was `last`, `elapsed` s ago.
+pub fn jumped(last: f64, now: f64, elapsed: f64, was_playing: bool) -> bool {
+    let expected = if was_playing { last + elapsed } else { last };
+    (now - expected).abs() > SEEK_SLACK
+}
+
+/// mpv volume while the sleep timer fades out, `left` seconds before it pauses.
+pub fn fade_volume(volume: f64, left: f64) -> f64 {
+    volume * (left / FADE_SECS).clamp(0.0, 1.0)
+}
+
 // =====================================================================
 // requests
 
@@ -373,6 +412,12 @@ pub enum Op {
     State,
     Queue,
     Lyrics,
+    /// Answers the state once `rev` differs from `since` (at once if it already does) or after `timeout` s.
+    Wait {
+        since: u64,
+        #[serde(default)]
+        timeout: Option<u32>,
+    },
     // ---- controls ----
     Toggle,
     Next,
@@ -392,6 +437,18 @@ pub enum Op {
     Repeat {
         mode: WRepeat,
     },
+    Eq,
+    SetEq {
+        preset: String,
+    },
+    /// Pause after `minutes`, or when the current song ends; neither cancels.
+    Sleep {
+        #[serde(default)]
+        minutes: Option<u32>,
+        #[serde(default)]
+        end_of_track: bool,
+    },
+    Show,
     // ---- queue ----
     Jump {
         index: usize,
@@ -440,6 +497,7 @@ pub enum Op {
         token: String,
     },
     Home,
+    Explore,
     Library {
         tab: LibraryTab,
     },
@@ -460,6 +518,18 @@ pub enum Op {
         #[serde(default)]
         video_ids: Vec<String>,
     },
+    SaveQueue {
+        title: String,
+    },
+    SaveToLibrary {
+        playlist_id: String,
+        save: bool,
+    },
+    RemoveFromPlaylist {
+        playlist_id: String,
+        video_id: String,
+        set_video_id: String,
+    },
 }
 
 fn short(field: &str, s: &str) -> Result<(), String> {
@@ -476,6 +546,14 @@ impl Op {
     /// Limits that serde can't express; index bounds are checked against the live queue by the app.
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            Op::Wait { timeout: Some(t), .. } if !(1..=MAX_WAIT).contains(t) => {
+                Err(format!("timeout must be 1–{MAX_WAIT}"))
+            }
+            Op::Sleep { minutes: Some(_), end_of_track: true } => Err("give minutes or endOfTrack, not both".into()),
+            Op::Sleep { minutes: Some(m), .. } if !(1..=MAX_SLEEP_MINUTES).contains(m) => {
+                Err(format!("minutes must be 1–{MAX_SLEEP_MINUTES}"))
+            }
+            Op::SetEq { preset } => short("preset", preset),
             Op::Seek { seconds } if !seconds.is_finite() || *seconds < 0.0 => Err("seconds must be ≥ 0".into()),
             Op::Volume { percent } if !percent.is_finite() || !(0.0..=100.0).contains(percent) => {
                 Err("percent must be 0–100".into())
@@ -518,6 +596,13 @@ impl Op {
                     return Err("too many videoIds".into());
                 }
                 video_ids.iter().try_for_each(|v| short("videoId", v))
+            }
+            Op::SaveQueue { title } => short("title", title),
+            Op::SaveToLibrary { playlist_id, .. } => short("playlistId", playlist_id),
+            Op::RemoveFromPlaylist { playlist_id, video_id, set_video_id } => {
+                short("playlistId", playlist_id)?;
+                short("videoId", video_id)?;
+                short("setVideoId", set_video_id)
             }
             _ => Ok(()),
         }
@@ -814,6 +899,106 @@ mod tests {
         assert_eq!(code(r#"{"v":1,"op":"play-target","target":{"kind":"watch"}}"#), "badRequest");
         assert_eq!(code(r#"{"v":1,"op":"add-to-playlist","playlistId":"PL","videoIds":[]}"#), "badRequest");
         assert_eq!(code(r#"{"v":1,"op":"rate","videoId":"x","like":"love"}"#), "badRequest");
+    }
+
+    #[test]
+    fn parses_new_ops() {
+        assert_eq!(parse(r#"{"v":1,"op":"wait","since":7}"#), Ok(Op::Wait { since: 7, timeout: None }));
+        assert_eq!(
+            parse(r#"{"v":1,"op":"wait","since":0,"timeout":25}"#),
+            Ok(Op::Wait { since: 0, timeout: Some(25) })
+        );
+        assert_eq!(parse(r#"{"v":1,"op":"explore"}"#), Ok(Op::Explore));
+        assert_eq!(parse(r#"{"v":1,"op":"eq"}"#), Ok(Op::Eq));
+        assert_eq!(parse(r#"{"v":1,"op":"set-eq","preset":"Vocal"}"#), Ok(Op::SetEq { preset: "Vocal".into() }));
+        assert_eq!(parse(r#"{"v":1,"op":"sleep"}"#), Ok(Op::Sleep { minutes: None, end_of_track: false }));
+        assert_eq!(
+            parse(r#"{"v":1,"op":"sleep","minutes":30}"#),
+            Ok(Op::Sleep { minutes: Some(30), end_of_track: false })
+        );
+        assert_eq!(
+            parse(r#"{"v":1,"op":"sleep","minutes":720,"endOfTrack":false}"#),
+            Ok(Op::Sleep { minutes: Some(720), end_of_track: false })
+        );
+        assert_eq!(
+            parse(r#"{"v":1,"op":"sleep","endOfTrack":true}"#),
+            Ok(Op::Sleep { minutes: None, end_of_track: true })
+        );
+        assert_eq!(parse(r#"{"v":1,"op":"show"}"#), Ok(Op::Show));
+        assert_eq!(parse(r#"{"v":1,"op":"save-queue","title":"Mix"}"#), Ok(Op::SaveQueue { title: "Mix".into() }));
+        assert_eq!(
+            parse(r#"{"v":1,"op":"save-to-library","playlistId":"PL","save":false}"#),
+            Ok(Op::SaveToLibrary { playlist_id: "PL".into(), save: false })
+        );
+        assert_eq!(
+            parse(r#"{"v":1,"op":"remove-from-playlist","playlistId":"PL","videoId":"v","setVideoId":"S"}"#),
+            Ok(Op::RemoveFromPlaylist { playlist_id: "PL".into(), video_id: "v".into(), set_video_id: "S".into() })
+        );
+    }
+
+    #[test]
+    fn rejects_bad_new_ops() {
+        let code = |s: &str| parse(s).unwrap_err().0;
+        for bad in [
+            r#"{"v":1,"op":"wait"}"#,
+            r#"{"v":1,"op":"wait","since":-1}"#,
+            r#"{"v":1,"op":"wait","since":1,"timeout":0}"#,
+            r#"{"v":1,"op":"wait","since":1,"timeout":26}"#,
+            r#"{"v":1,"op":"set-eq"}"#,
+            r#"{"v":1,"op":"set-eq","preset":" "}"#,
+            r#"{"v":1,"op":"sleep","minutes":0}"#,
+            r#"{"v":1,"op":"sleep","minutes":721}"#,
+            r#"{"v":1,"op":"sleep","minutes":10,"endOfTrack":true}"#,
+            r#"{"v":1,"op":"sleep","minutes":"10"}"#,
+            r#"{"v":1,"op":"save-queue"}"#,
+            r#"{"v":1,"op":"save-queue","title":""}"#,
+            r#"{"v":1,"op":"save-to-library","playlistId":"PL"}"#,
+            r#"{"v":1,"op":"save-to-library","playlistId":"","save":true}"#,
+            r#"{"v":1,"op":"remove-from-playlist","playlistId":"PL","videoId":"v"}"#,
+            r#"{"v":1,"op":"remove-from-playlist","playlistId":"PL","videoId":"v","setVideoId":" "}"#,
+        ] {
+            assert_eq!(code(bad), "badRequest", "{bad}");
+        }
+        assert_eq!(code(&format!(r#"{{"v":1,"op":"save-queue","title":"{}"}}"#, "a".repeat(301))), "badRequest");
+    }
+
+    #[test]
+    fn queue_rev_follows_contents_and_position() {
+        let base = queue_rev(["a", "b"], Some(0), false);
+        assert_eq!(base, queue_rev(["a", "b"], Some(0), false));
+        assert_ne!(base, queue_rev(["b", "a"], Some(0), false));
+        assert_ne!(base, queue_rev(["a", "b"], Some(1), false));
+        assert_ne!(base, queue_rev(["a", "b"], Some(0), true));
+        assert_ne!(base, queue_rev(["a", "b", "c"], Some(0), false));
+    }
+
+    #[test]
+    fn fingerprint_ignores_position_only() {
+        let a = json!({"playing": true, "position": 10.0, "volume": 50.0});
+        assert_eq!(fingerprint(&a), fingerprint(&json!({"playing": true, "position": 99.0, "volume": 50.0})));
+        assert_ne!(fingerprint(&a), fingerprint(&json!({"playing": false, "position": 10.0, "volume": 50.0})));
+        assert_ne!(fingerprint(&a), fingerprint(&json!({"playing": true, "position": 10.0, "volume": 51.0})));
+    }
+
+    #[test]
+    fn seek_detection() {
+        // Normal playback, with jitter under the slack.
+        assert!(!jumped(10.0, 15.0, 5.0, true));
+        assert!(!jumped(10.0, 16.2, 5.0, true));
+        assert!(!jumped(10.0, 10.0, 30.0, false));
+        // Seeks forward and back, and moving while paused.
+        assert!(jumped(10.0, 60.0, 0.2, true));
+        assert!(jumped(10.0, 3.0, 0.2, true));
+        assert!(jumped(10.0, 20.0, 1.0, false));
+    }
+
+    #[test]
+    fn fade_is_linear_and_bounded() {
+        assert_eq!(fade_volume(80.0, 100.0), 80.0);
+        assert_eq!(fade_volume(80.0, FADE_SECS), 80.0);
+        assert_eq!(fade_volume(80.0, FADE_SECS / 2.0), 40.0);
+        assert_eq!(fade_volume(80.0, 0.0), 0.0);
+        assert_eq!(fade_volume(80.0, -1.0), 0.0);
     }
 
     #[test]

@@ -23,6 +23,7 @@ use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
 use velour_player::{Event, Player, Resolver};
 use velour_ytm::{Card, Client, Cookies, Item, LikeStatus, Page, PageType, Queue, Section, Target, Track};
 
@@ -180,6 +181,21 @@ pub struct App {
     duration: f64,
     /// Lyrics of the last song they were loaded for (answers remote requests without refetching).
     last_lyrics: Option<(String, LyricsResult)>,
+    /// When `position` was last set (to project it forward while playing).
+    position_at: Instant,
+    /// Bumped whenever the remote-visible state changes (see `remote_state`).
+    rev: u64,
+    rev_print: u64,
+    /// (projected position, when, playing) at the last `rev` check, to spot seeks.
+    rev_pos: (f64, Instant, bool),
+    /// Parked `wait` requests and their deadlines.
+    waiters: Vec<(Reply, Instant)>,
+    remote_tick: Option<glib::SourceId>,
+    sleep: Option<Sleep>,
+    /// Times the sleep timer went off (tells a client "fired" from "cancelled").
+    slept: u32,
+    /// mpv volume is lowered by the sleep fade.
+    faded: bool,
 }
 
 const NAV_ROOTS: [(Root, &str, &str); 6] = [
@@ -217,6 +233,16 @@ fn cookies_arg(browser: &str) -> String {
         (b, _) => b.to_string(),
     }
 }
+
+/// Sleep timer started from the remote.
+#[derive(Debug, Clone, Copy)]
+enum Sleep {
+    At { deadline: Instant, unix: f64 },
+    EndOfTrack,
+}
+
+/// Remote clients parked on `wait` at once (each holds one of the socket's 8 connections).
+const MAX_WAITERS: usize = 4;
 
 fn err(e: anyhow::Error) -> String {
     format!("{e:#}")
@@ -568,6 +594,15 @@ impl Component for App {
             remote: None,
             duration: 0.0,
             last_lyrics: None,
+            position_at: Instant::now(),
+            rev: 0,
+            rev_print: 0,
+            rev_pos: (0.0, Instant::now(), false),
+            waiters: vec![],
+            remote_tick: None,
+            sleep: None,
+            slept: 0,
+            faded: false,
             settings,
         };
         model.apply_sidebar_playlists();
@@ -927,6 +962,7 @@ impl Component for App {
             }
             AppMsg::Quit => self.quit(),
             AppMsg::Remote(op, reply) => self.remote(op, reply, &sender),
+            AppMsg::RemoteTick => self.on_remote_tick(),
         }
     }
 
@@ -1603,6 +1639,7 @@ impl App {
             if let (Ok(url), Some(next)) = (&result, self.queue.next())
                 && next.video_id == id
                 && self.loaded_id.is_some()
+                && !self.stop_after_track()
                 && let Some(p) = &self.player
                 && p.set_next(url, &id).is_ok()
             {
@@ -1648,7 +1685,9 @@ impl App {
         if self.loaded_id.is_none() {
             return;
         }
-        let Some(next) = self.queue.next().cloned() else {
+        // The sleep timer stops after this song: let mpv go idle at its end.
+        let next = if self.stop_after_track() { None } else { self.queue.next().cloned() };
+        let Some(next) = next else {
             if let Some(p) = &self.player {
                 let _ = p.clear_next();
             }
@@ -1717,6 +1756,7 @@ impl App {
             }
             Event::Position(p) => {
                 self.position = p;
+                self.position_at = Instant::now();
                 self.maybe_send_history();
                 self.bar.set_position(p);
                 self.panel.set_position(p);
@@ -1740,7 +1780,23 @@ impl App {
             Event::Idle => {
                 if std::mem::take(&mut self.ended_eof) {
                     self.loaded_id = None;
-                    if self.queue.advance() {
+                    if self.stop_after_track() {
+                        self.sleep_fired(true);
+                        // Line up the next song, stopped: Play starts it.
+                        if self.queue.advance()
+                            && let Some(t) = self.queue.current().cloned()
+                        {
+                            self.show_track(Some(&t));
+                            self.mark_playing(Some(&t.video_id));
+                            self.panel.set_queue_position(self.queue.position());
+                            self.position = 0.0;
+                            self.bar.set_position(0.0);
+                            self.duration = t.duration.map(f64::from).unwrap_or(0.0);
+                        }
+                        self.paused = true;
+                        self.bar.set_paused(true);
+                        self.integrations.playback_changed(false);
+                    } else if self.queue.advance() {
                         self.start_current(sender);
                     } else {
                         self.paused = true;
@@ -1759,6 +1815,7 @@ impl App {
         {
             let _ = p.seek(s);
             self.position = s;
+            self.position_at = Instant::now();
             self.bar.set_position(s);
             self.integrations.seeked(s);
         }
@@ -2018,8 +2075,14 @@ impl App {
         }
     }
 
-    fn remote_state(&self) -> Value {
+    fn state_body(&self) -> Value {
         let t = self.queue.current();
+        let index = t.map(|_| self.queue.position());
+        let sleep = match self.sleep {
+            None => Value::Null,
+            Some(Sleep::At { unix, .. }) => json!({ "endsAt": unix, "endOfTrack": false }),
+            Some(Sleep::EndOfTrack) => json!({ "endsAt": null, "endOfTrack": true }),
+        };
         json!({
             "track": t.map(WTrack::from),
             "index": t.map(|_| self.queue.position()),
@@ -2033,7 +2096,128 @@ impl App {
             "shuffle": self.queue.shuffle(),
             "repeat": remote::repeat_name(self.queue.repeat),
             "signedIn": self.ytm.is_some(),
+            "queueRev": remote::queue_rev(
+                self.queue.tracks().iter().map(|t| t.video_id.as_str()),
+                index,
+                self.queue.radio.is_some()
+            ),
+            "sleep": sleep,
+            "slept": self.slept,
+            "eq": self.settings.eq_preset,
         })
+    }
+
+    /// The state for remote clients. Bumps `rev` if anything but the normal progress of the position changed
+    /// since the last call, and then answers the parked `wait` requests.
+    fn remote_state(&mut self) -> Value {
+        let mut v = self.state_body();
+        let playing = self.loaded_id.is_some() && !self.paused;
+        let pos = self.position + if playing { self.position_at.elapsed().as_secs_f64() } else { 0.0 };
+        let (last, at, was_playing) = self.rev_pos;
+        let print = remote::fingerprint(&v);
+        let changed = print != self.rev_print || remote::jumped(last, pos, at.elapsed().as_secs_f64(), was_playing);
+        if changed {
+            self.rev += 1;
+            self.rev_print = print;
+        }
+        self.rev_pos = (pos, Instant::now(), playing);
+        v["rev"] = json!(self.rev);
+        if changed {
+            for (r, _) in self.waiters.drain(..) {
+                r.ok(v.clone());
+            }
+        }
+        v
+    }
+
+    /// Runs the 200 ms tick only while someone waits or a timed sleep counts down.
+    fn sync_remote_tick(&mut self) {
+        let needed = !self.waiters.is_empty() || matches!(self.sleep, Some(Sleep::At { .. }));
+        if needed && self.remote_tick.is_none() {
+            let s = self.input.clone();
+            self.remote_tick = Some(glib::timeout_add_local(Duration::from_millis(200), move || {
+                s.emit(AppMsg::RemoteTick);
+                glib::ControlFlow::Continue
+            }));
+        } else if !needed && let Some(t) = self.remote_tick.take() {
+            t.remove();
+        }
+    }
+
+    fn on_remote_tick(&mut self) {
+        if let Some(Sleep::At { deadline, .. }) = self.sleep {
+            let left = deadline.saturating_duration_since(Instant::now()).as_secs_f64();
+            let playing = self.loaded_id.is_some() && !self.paused;
+            if left <= 0.0 {
+                if playing && let Some(p) = &self.player {
+                    let _ = p.set_pause(true);
+                }
+                self.end_fade();
+                self.sleep_fired(playing);
+            } else if left < remote::FADE_SECS
+                && playing
+                && let Some(p) = &self.player
+            {
+                let _ = p.set_volume(remote::fade_volume(self.volume, left));
+                self.faded = true;
+            }
+        }
+        self.remote_state();
+        let now = Instant::now();
+        if self.waiters.iter().any(|(_, d)| *d <= now) {
+            let state = self.remote_state();
+            let (due, keep) = std::mem::take(&mut self.waiters).into_iter().partition(|(_, d)| *d <= now);
+            self.waiters = keep;
+            for (r, _) in due {
+                r.ok(state.clone());
+            }
+        }
+        self.sync_remote_tick();
+    }
+
+    /// The sleep timer stops playback when the current song ends.
+    fn stop_after_track(&self) -> bool {
+        matches!(self.sleep, Some(Sleep::EndOfTrack))
+    }
+
+    /// Gives mpv back the user's volume after a (partial) sleep fade.
+    fn end_fade(&mut self) {
+        if std::mem::take(&mut self.faded)
+            && let Some(p) = &self.player
+        {
+            let _ = p.set_volume(self.volume);
+        }
+    }
+
+    fn sleep_fired(&mut self, paused: bool) {
+        self.sleep = None;
+        self.slept += 1;
+        if paused {
+            self.toast("Sleep timer: paused");
+        }
+    }
+
+    fn set_sleep(&mut self, minutes: Option<u32>, end_of_track: bool, sender: &ComponentSender<Self>) {
+        self.end_fade();
+        let was_end_of_track = self.stop_after_track();
+        self.sleep = match (minutes, end_of_track) {
+            (Some(m), _) => {
+                let secs = u64::from(m) * 60;
+                let unix = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs_f64();
+                Some(Sleep::At { deadline: Instant::now() + Duration::from_secs(secs), unix: unix + secs as f64 })
+            }
+            (None, true) => Some(Sleep::EndOfTrack),
+            (None, false) => None,
+        };
+        // Drops or restores the gapless next song in mpv.
+        if was_end_of_track || self.stop_after_track() {
+            self.prepare_next(sender);
+        }
+        self.sync_remote_tick();
+    }
+
+    fn remote_eq(&self) -> Value {
+        json!({ "preset": self.settings.eq_preset, "presets": eq::names() })
     }
 
     /// Runs a control message as if it came from the UI, then answers with the new state.
@@ -2088,6 +2272,16 @@ impl App {
         let page = |p: Page| serde_json::to_value(remote::wpage(&p)).map_err(Into::into);
         match op {
             Op::State => reply.ok(self.remote_state()),
+            Op::Wait { since, timeout } => {
+                let state = self.remote_state();
+                if self.rev != since || self.waiters.len() >= MAX_WAITERS {
+                    reply.ok(state);
+                } else {
+                    let secs = timeout.unwrap_or(remote::DEFAULT_WAIT);
+                    self.waiters.push((reply, Instant::now() + Duration::from_secs(secs.into())));
+                    self.sync_remote_tick();
+                }
+            }
             Op::Queue => reply.ok(json!({
                 "index": self.queue.current().map(|_| self.queue.position()),
                 "tracks": self.queue.tracks().iter().map(WTrack::from).collect::<Vec<_>>(),
@@ -2135,6 +2329,23 @@ impl App {
                 }
                 reply.ok(self.remote_state());
             }
+            Op::Eq => reply.ok(self.remote_eq()),
+            Op::SetEq { preset } if !eq::names().contains(&preset.as_str()) => {
+                reply.err("notFound", "no equalizer preset with that name")
+            }
+            Op::SetEq { preset } => {
+                self.change_setting(SettingChange::Eq(preset), sender);
+                self.refresh_settings_page();
+                reply.ok(self.remote_eq());
+            }
+            Op::Sleep { minutes, end_of_track } => {
+                self.set_sleep(minutes, end_of_track, sender);
+                reply.ok(self.remote_state());
+            }
+            Op::Show => {
+                sender.input(AppMsg::ShowWindow);
+                reply.ok(json!({}));
+            }
 
             Op::Jump { index } | Op::Remove { index } if index >= len => {
                 reply.err("notFound", "no song at that queue position")
@@ -2174,6 +2385,7 @@ impl App {
             }
             Op::More { token } => self.remote_fetch(reply, sender, move |c| async move { page(c.more(&token).await?) }),
             Op::Home => self.remote_fetch(reply, sender, move |c| async move { page(c.home().await?) }),
+            Op::Explore => self.remote_fetch(reply, sender, move |c| async move { page(c.explore().await?) }),
             Op::Library { tab } => self.remote_fetch(reply, sender, move |c| async move {
                 page(match tab {
                     RemoteTab::Playlists => c.library_playlists().await?,
@@ -2221,6 +2433,33 @@ impl App {
                     let ids: Vec<&str> = video_ids.iter().map(String::as_str).collect();
                     let id = c.create_playlist(&title, &ids).await?;
                     Ok((json!({ "id": id }), format!("Created “{title}”")))
+                });
+            }
+            Op::SaveQueue { title } => {
+                // Same tracks as saving the queue on the PC.
+                let ids: Vec<String> =
+                    self.queue.tracks().iter().filter(|t| t.playable).map(|t| t.video_id.clone()).collect();
+                if ids.is_empty() {
+                    reply.err("notFound", "the queue is empty");
+                    return;
+                }
+                self.remote_api(reply, sender, true, move |c| async move {
+                    let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+                    let id = c.create_playlist(&title, &ids).await?;
+                    Ok((json!({ "id": id }), format!("Created “{title}”")))
+                });
+            }
+            Op::SaveToLibrary { playlist_id, save } => {
+                self.remote_api(reply, sender, true, move |c| async move {
+                    c.rate_playlist(&playlist_id, save).await?;
+                    let msg = if save { "Saved to library" } else { "Removed from library" };
+                    Ok((json!({}), msg.to_string()))
+                });
+            }
+            Op::RemoveFromPlaylist { playlist_id, video_id, set_video_id } => {
+                self.remote_api(reply, sender, false, move |c| async move {
+                    c.remove_from_playlist(&playlist_id, &video_id, &set_video_id).await?;
+                    Ok((json!({}), "Removed from the playlist".to_string()))
                 });
             }
         }
